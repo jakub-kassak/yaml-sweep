@@ -1,0 +1,7 @@
+# Test 10: BFS - Zip in nested field links to sibling zip in same mapping
+list1:
+  - list2:
+      # inneres Zip
+      - key21: !zip_a [1, 2]
+    # äusseres Zip im selben Mapping
+    key1: !zip_a [1, 2]

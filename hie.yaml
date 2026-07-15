@@ -1,0 +1,8 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:yaml-sweep"
+    - path: "./app"
+      component: "yaml-sweep:exe:yaml-sweep-cli"
+    - path: "./test"
+      component: "yaml-sweep:test:yaml-sweep-test"
