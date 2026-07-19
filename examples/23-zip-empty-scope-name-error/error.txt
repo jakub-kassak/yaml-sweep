@@ -1,0 +1,1 @@
+!zip_ with empty scope name

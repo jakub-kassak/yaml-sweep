@@ -1,0 +1,14 @@
+# 08-nested-zip: Two !zip_a markers at different depths share the
+# same local scope `a`:
+#   - key21 lives inside the inner list `list2`
+#   - key1  is a sibling of `list2` in the outer list `list1`
+# Both bubble up to their nearest common enclosing array (`list1`) and
+# expand in lockstep by index: variant i takes key1[i] and key21[i]
+# together. -> 2 variants, with synchronized values across the nested
+# hierarchy:
+#   list1[0]: {key1: 1, list2: [{key21: 1}]}
+#   list1[1]: {key1: 2, list2: [{key21: 2}]}
+list1:
+  - list2:
+      - key21: !zip_a [1, 2]
+    key1: !zip_a [1, 2]

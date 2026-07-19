@@ -1,0 +1,8 @@
+# 13-mixed-scopes: Two scopes `a` (defined at root) and `b` (defined localy) are mixed within
+# the same list elements. The result is two config variants with `items` of length four.
+!key a:
+items:
+  - b: !zip_b [10, 20]
+    a: !zip_a [1, 2]
+  - b: !zip_b [30, 40]
+    a: !zip_a [1, 2]

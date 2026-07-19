@@ -1,0 +1,5 @@
+# 17-inherit (base.yaml): Base config that `config.yaml` inherits from.
+# `traces.samples` is overridden by the child; `traces.mode` is kept.
+traces:
+  mode: post_hoc
+  samples: 1

@@ -1,0 +1,5 @@
+# 26-inherit-no-base-error: An !inherit mapping without a 'base' key is
+# rejected. Parser.hs: "!inherit requires a 'base' key"
+--- !inherit
+traces:
+  samples: 2

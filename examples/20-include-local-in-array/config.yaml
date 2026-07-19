@@ -1,0 +1,8 @@
+# 20-include-local-in-array: `!include` splices `inner.yaml` as an
+# element of the `data` array. The included file contains a local zip
+# scope `x` that is fully self-contained (declared and consumed within
+# the include) -> the include resolves internally and produces 2
+# variants of the `items` array, while `outer: hello` stays fixed.
+outer: hello
+data:
+  - !include inner.yaml

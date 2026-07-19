@@ -1,0 +1,7 @@
+# 05-zip-same-element: Two zip markers sharing a scope within the same
+# list element. Because both `a` and `b` use scope `x`, they are
+# index-linked within the element -> 2 variants:
+#   {a: 1, b: 10} and {a: 2, b: 20}.
+attribution:
+  - a: !zip_x [1, 2]
+    b: !zip_x [10, 20]

@@ -1,0 +1,6 @@
+# 11-double-key-definition: A key can only be declared once per scope.
+# Declaring `!key a` twice in the same dict -> error "shadowing".
+!key a:
+dict:
+  !key a:
+  key1: !zip_a [1, 2]

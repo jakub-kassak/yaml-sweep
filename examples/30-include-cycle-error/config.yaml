@@ -1,0 +1,4 @@
+# 30-include-cycle-error: config.yaml includes inner.yaml, which
+# includes config.yaml again -> cycle. Loader.hs: "Cycle detected"
+traces:
+  - !include inner.yaml

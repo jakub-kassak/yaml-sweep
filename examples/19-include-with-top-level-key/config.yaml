@@ -1,0 +1,4 @@
+# 19-include-with-top-level-key: Included or inherited files are not allowed to 
+# define to level keys (or use top level !zip).
+items:
+  - !include inner.yaml

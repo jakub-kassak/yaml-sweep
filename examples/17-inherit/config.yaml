@@ -1,0 +1,7 @@
+# 17-inherit: `!inherit` loads `inherit.yaml` (defined with `base:` key) and deep-merges the local
+# fields on top of it. Local `traces.samples: 2` overrides the base's
+# `samples: 1`, while `traces.mode` is inherited unchanged -> 1 variant.
+--- !inherit
+base: inherit.yaml
+traces:
+  samples: 2

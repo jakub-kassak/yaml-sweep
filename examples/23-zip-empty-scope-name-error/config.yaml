@@ -1,0 +1,4 @@
+# 23-zip-empty-scope-name-error: A bare !zip_ tag without a scope name
+# is rejected. Parser.hs: "!zip_ with empty scope name"
+traces:
+  samples: !zip_ [1, 2]

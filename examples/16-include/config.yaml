@@ -1,0 +1,4 @@
+# 16-include: `!include` inlines another YAML file at the tag position.
+traces:
+  - !include include.yaml
+  - !include dir/include-from-dir.yaml

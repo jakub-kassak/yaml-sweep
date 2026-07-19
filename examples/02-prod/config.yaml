@@ -1,0 +1,5 @@
+# 02-prod: A single !prod sweep point.
+# !prod expands each value independently -> here 2 variants
+# (samples=1 and samples=3).
+traces:
+  samples: !prod [1, 3]

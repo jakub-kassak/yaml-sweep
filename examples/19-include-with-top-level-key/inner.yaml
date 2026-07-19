@@ -1,0 +1,5 @@
+# 18-include-key-leak (inner.yaml): References scope `a` which was
+# declared in the including file. Because `!include` is a zip-scope
+# boundary, this reference has no matching declaration on this side ->
+# "Zip over zip boundary" error.
+val: !zip_a [1, 2]

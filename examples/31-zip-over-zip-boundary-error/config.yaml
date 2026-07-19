@@ -1,0 +1,7 @@
+# 31-zip-over-zip-boundary-error: A !zip_a element that itself contains
+# a sweep producing multiple variants (here a !prod inside the zip
+# element) cannot be collapsed to a single value per index.
+# Expander.hs: "Zip over zip boundary is not supported"
+list:
+  - a: !zip_a
+      - inner: !prod [10, 20]

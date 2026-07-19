@@ -1,0 +1,3 @@
+traces:
+  mode: post_hoc
+  samples: 1

@@ -1,0 +1,9 @@
+list1:
+- list2:
+  - inner_key: a
+  - inner_key: b
+  outer_key: 1
+- list2:
+  - inner_key: a
+  - inner_key: b
+  outer_key: 2

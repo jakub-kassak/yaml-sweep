@@ -1,0 +1,8 @@
+---
+attribution:
+  - drop_threshold: 0.5
+  - drop_threshold: 0.5
+---
+attribution:
+  - drop_threshold: 0.8
+  - drop_threshold: 0.8

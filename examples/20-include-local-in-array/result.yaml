@@ -1,0 +1,5 @@
+outer: hello
+data:
+  - items:
+      - val: 1
+      - val: 2

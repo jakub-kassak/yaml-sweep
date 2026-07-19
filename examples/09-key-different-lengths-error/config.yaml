@@ -1,0 +1,7 @@
+# 09-key-different-lengths-error: All markers in the same named scope
+# must list the same number of values. Here the first `lr` has 3 values
+# while the second has only 2 -> error "inconsistent lengths".
+!key lr:
+experiments:
+  - lr: !zip_lr [0.1, 0.01, 0.001]
+  - lr: !zip_lr [0.1, 0.01]

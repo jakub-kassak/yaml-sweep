@@ -1,0 +1,5 @@
+# 25-key-empty-name-error: A !key declaration with an empty name is
+# rejected. Parser.hs: "!key with empty name"
+!key "":
+traces:
+  samples: 1

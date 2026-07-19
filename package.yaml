@@ -22,6 +22,8 @@ github: agentdojo/yaml-sweep
 extra-doc-files:
   - README.md
   - CHANGELOG.md
+  - docs/test-10-nested-bfs.md
+  - examples/**/*
 extra-source-files:
   - README.md
   - LICENSE
@@ -34,7 +36,6 @@ extra-source-files:
   - demo3.yaml
   - demo3.result.yaml
   - demo4.yaml
-  - docs/test-10-nested-bfs.md
 verbatim:
   cabal-version: 3.0
 

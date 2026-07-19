@@ -1,0 +1,7 @@
+# 10-key-shadowing-error: A named key scope cannot be redeclared inside
+# its own subtree. The outer `!key a` already binds the name `a`, so the
+# inner `!key a` would shadow it -> error "shadowing".
+!key a:
+list:
+  - !key a:
+    key1: !zip_a [1, 2]

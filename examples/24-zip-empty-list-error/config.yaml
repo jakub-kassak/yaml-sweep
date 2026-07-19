@@ -1,0 +1,4 @@
+# 24-zip-empty-list-error: A !zip_<name> with an empty list is rejected.
+# Parser.hs: "!zip_<name> with empty list"
+traces:
+  samples: !zip_a []

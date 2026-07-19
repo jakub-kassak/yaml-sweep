@@ -1,0 +1,5 @@
+# 01-simple: A plain config with no sweep markers.
+# Exactly one variant is produced, identical to the input.
+traces:
+  mode: post_hoc
+  samples: 1

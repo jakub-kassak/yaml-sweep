@@ -1,0 +1,3 @@
+# 21-include-plain-alongside-sweeps (inner.yaml): Plain YAML with no
+# sweep markers. Spliced unchanged into every variant of the parent.
+val: fixed

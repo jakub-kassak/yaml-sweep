@@ -29,10 +29,58 @@ extra-source-files:
     demo3.yaml
     demo3.result.yaml
     demo4.yaml
-    docs/test-10-nested-bfs.md
 extra-doc-files:
     README.md
     CHANGELOG.md
+    docs/test-10-nested-bfs.md
+    examples/01-simple/config.yaml
+    examples/01-simple/result.yaml
+    examples/02-prod/config.yaml
+    examples/02-prod/result.yaml
+    examples/03-prod-cartesian/config.yaml
+    examples/03-prod-cartesian/result.yaml
+    examples/04-bubble-one-level-up/config.yaml
+    examples/04-bubble-one-level-up/result.yaml
+    examples/05-zip-same-element/config.yaml
+    examples/05-zip-same-element/result.yaml
+    examples/06-zip-different-elems/config.yaml
+    examples/06-zip-different-elems/result.yaml
+    examples/07-zip-key-cross-element/config.yaml
+    examples/07-zip-key-cross-element/result.yaml
+    examples/08-bfs-nested-field/config.yaml
+    examples/08-bfs-nested-field/result.yaml
+    examples/09-key-different-lengths-error/config.yaml
+    examples/09-key-different-lengths-error/error.txt
+    examples/10-key-shadowing-error/config.yaml
+    examples/10-key-shadowing-error/error.txt
+    examples/11-double-key-definition/config.yaml
+    examples/11-double-key-definition/error.txt
+    examples/12-different-keys-product/config.yaml
+    examples/12-different-keys-product/result.yaml
+    examples/13-mixed-scopes-field-order/config.yaml
+    examples/13-mixed-scopes-field-order/result.yaml
+    examples/14-nested-bfs-two-keys/config.yaml
+    examples/14-nested-bfs-two-keys/result.yaml
+    examples/15-nested-key-scopes/config.yaml
+    examples/15-nested-key-scopes/result.yaml
+    examples/16-include/base.yaml
+    examples/16-include/config.yaml
+    examples/16-include/result.yaml
+    examples/17-inherit/base.yaml
+    examples/17-inherit/config.yaml
+    examples/17-inherit/result.yaml
+    examples/18-include-key-leak/config.yaml
+    examples/18-include-key-leak/error.txt
+    examples/18-include-key-leak/inner.yaml
+    examples/19-include-barrier/config.yaml
+    examples/19-include-barrier/error.txt
+    examples/19-include-barrier/inner.yaml
+    examples/20-include-local-in-array/config.yaml
+    examples/20-include-local-in-array/inner.yaml
+    examples/20-include-local-in-array/result.yaml
+    examples/21-include-plain-alongside-sweeps/config.yaml
+    examples/21-include-plain-alongside-sweeps/inner.yaml
+    examples/21-include-plain-alongside-sweeps/result.yaml
 
 source-repository head
   type: git
@@ -132,6 +180,7 @@ test-suite yaml-sweep-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Runner
       Paths_yaml_sweep
   autogen-modules:
       Paths_yaml_sweep

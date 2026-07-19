@@ -1,0 +1,5 @@
+# 03-prod-cartesian: Multiple !prod markers form a cartesian product.
+# 2 values for samples x 2 values for max_rounds = 4 variants.
+traces:
+  samples: !prod [1, 2]
+  max_rounds: !prod [5, 10]

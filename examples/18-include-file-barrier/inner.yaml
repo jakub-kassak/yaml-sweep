@@ -1,0 +1,6 @@
+# 19-include-barrier (inner.yaml): Declares a local scope `b` and two
+# zip markers. Because the include site is a single array element in the
+# parent and `!include` is a zip boundary, these markers cannot expand
+# the parent's `items` array -> "Zip over zip boundary" error.
+- x: !zip_A [1, 2]
+  y: !zip_A [10, 20]

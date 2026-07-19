@@ -1,0 +1,2 @@
+# inner.yaml: includes the parent again, forming a cycle.
+val: !include config.yaml

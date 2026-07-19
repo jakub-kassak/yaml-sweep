@@ -1,0 +1,5 @@
+# 20-include-local-in-array (inner.yaml): The included content holds a
+# local zip scope `x` (no `!key` declaration). It expands internally to
+# 2 variants of the `items` array before being spliced into the parent.
+items:
+  - val: !zip_x [1, 2]

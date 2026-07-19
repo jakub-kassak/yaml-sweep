@@ -1,0 +1,7 @@
+# 18-include-file-barrier: The included `inner.yaml` doesn't inherit the `A` key, but declares its own scope
+# `A` scope. Although there is no scope name clash
+# with the outer file, `!include` and `!inherit` create a file boundary.
+!key A:
+items:
+  - !include inner.yaml
+

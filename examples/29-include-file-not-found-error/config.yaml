@@ -1,0 +1,4 @@
+# 29-include-file-not-found-error: The !include target does not exist
+# on disk. Loader.hs: "file not found"
+traces:
+  - !include missing.yaml

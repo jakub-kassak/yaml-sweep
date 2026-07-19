@@ -1,0 +1,14 @@
+# 14-nested-two-keys: Two named scopes (`A` declared at the top,
+# `B` declared inside `dict2`) that are nested. Scope `A` links `a1`
+# and `a2` across `list3`; scope `B` links `b2` and `b3`. Because the
+# scopes are independent, `A` drives the outer expansion (2 variants)
+# and `B` drives the inner expansion (2 variants) -> 4 variants total.
+!key A:
+list1:
+  - dict2:
+      !key B:
+      list3:
+        - a1: !zip_A [11, 12]
+        - a2: !zip_A [21, 22]
+          b2: !zip_B [28, 29]
+        - b3: !zip_B [38, 39]

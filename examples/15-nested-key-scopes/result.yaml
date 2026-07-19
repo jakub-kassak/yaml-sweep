@@ -1,0 +1,48 @@
+---
+experiments:
+  - model: gpt4
+    temp: 0.0
+    benchmarks:
+      - name: mmlu
+        metric: accuracy
+      - shots: 5
+  - model: gpt4
+    temp: 0.0
+    benchmarks:
+      - name: gsm8k
+        metric: exact_match
+      - shots: 8
+  - model: gpt4
+    temp: 0.0
+    benchmarks:
+      - name: humaneval
+        metric: pass_at_1
+      - shots: 0
+  - model: gpt4
+    endpoint: /v1/chat
+    task: safety_eval
+    max_tokens: 512
+---
+experiments:
+  - model: claude
+    temp: 0.7
+    benchmarks:
+      - name: mmlu
+        metric: accuracy
+      - shots: 5
+  - model: claude
+    temp: 0.7
+    benchmarks:
+      - name: gsm8k
+        metric: exact_match
+      - shots: 8
+  - model: claude
+    temp: 0.7
+    benchmarks:
+      - name: humaneval
+        metric: pass_at_1
+      - shots: 0
+  - model: claude
+    endpoint: /v1/messages
+    task: safety_eval
+    max_tokens: 512

@@ -1,0 +1,4 @@
+# 16-include (base.yaml): Content inlined by the parent config via
+# `!include base.yaml`. Becomes a single element of the `traces` list.
+mode: post_hoc
+samples: 1

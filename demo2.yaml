@@ -1,4 +1,0 @@
-list1:
-  - list2:
-      - key21: !zip_a [1, 2]
-    key1: !zip_a [1, 2]

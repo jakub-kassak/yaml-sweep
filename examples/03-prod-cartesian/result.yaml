@@ -1,0 +1,16 @@
+---
+traces:
+  samples: 1
+  max_rounds: 5
+---
+traces:
+  samples: 1
+  max_rounds: 10
+---
+traces:
+  samples: 2
+  max_rounds: 5
+---
+traces:
+  samples: 2
+  max_rounds: 10

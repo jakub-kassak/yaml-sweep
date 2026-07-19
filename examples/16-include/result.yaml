@@ -1,0 +1,5 @@
+traces:
+- mode: post_hoc
+  samples: 1
+- mode: live
+  samples: 1

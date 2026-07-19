@@ -1,0 +1,4 @@
+# 27-yaml-parse-error: config.yaml itself is not valid YAML, so the
+# loader rejects it. Loader.hs: "YAML parse error"
+traces:
+  samples: [1, 2

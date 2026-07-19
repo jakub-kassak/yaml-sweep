@@ -1,5 +1,0 @@
-!key a
-list1:
-  - a1: !zip_a [1, 2]
-  - a2: !zip_b [!zip_a[1, 2], 3]
-    b2: !zip_b [3, 4]

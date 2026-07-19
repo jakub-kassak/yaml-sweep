@@ -1,0 +1,8 @@
+# 06-zip-key-cross-element: A named key scope `!key th` links zip markers
+# across sibling list elements. Both `drop_threshold` fields use the same
+# key `th`, so they advance in lockstep -> 2 variants where both
+# elements share the same threshold value.
+!key th:
+attribution:
+  - drop_threshold: !zip_th [0.5, 0.8]
+  - drop_threshold: !zip_th [0.5, 0.8]

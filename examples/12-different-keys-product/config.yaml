@@ -1,0 +1,14 @@
+# 12-different-keys-product: Two distinct named scopes `a` and `b`
+# inside the same list element. Markers sharing a scope are index-linked
+# (a1/a2 advance together, b1/b2 advance together), but the two scopes
+# are independent of each other -> the element expands to their
+# cartesian product: 2 (a) x 2 (b) = 4 list entries, all in a single
+# variant:
+#   (a=1, b=10), (a=1, b=20), (a=2, b=10), (a=2, b=20).
+# Contrast with 05-zip-same-element, where a single shared scope keeps
+# everything index-linked (2 entries instead of 4).
+list:
+  - a1: !zip_a [1, 2]
+    a2: !zip_a [1, 2]
+    b1: !zip_b [10, 20]
+    b2: !zip_b [10, 20]

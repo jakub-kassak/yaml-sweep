@@ -1,0 +1,10 @@
+# 06-zip-different-elems: A local zip scope (no `!key` declaration).
+# Two markers with the same name `key` do not share common list element and 
+# therefore form diffrent scopes. Their results bubble up to the nearest common
+# enclosing array and expand. Because the scopes are separated, different lengths are allowed.
+# Contrast with 04: here the scope is implicit/local rather than declared.
+array:
+  - elem1a: !zip_key [0.1, 0.2] # -> creates 2 elements in `array`
+    elem1b: !zip_key [1, 2]
+  - elem2a: !zip_key [0.3, 0.4, 0.5] # -> creates 3 elements in `array`
+    elem2b: !zip_key [3, 4, 5]
