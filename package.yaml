@@ -31,11 +31,6 @@ extra-source-files:
   - Setup.hs
   - hie.yaml
   - package.yaml
-  - demo.yaml
-  - demo2.yaml
-  - demo3.yaml
-  - demo3.result.yaml
-  - demo4.yaml
 verbatim:
   cabal-version: 3.0
 
