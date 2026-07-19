@@ -6,8 +6,8 @@ module Yaml.Sweep.Loader
     resolvePath,
     scalarText,
     lookupScalar,
-    nodeKey,
     nodeAnn,
+    formatSource,
   )
 where
 
@@ -21,6 +21,7 @@ import Data.YAML (Doc (..), Mapping, Node (..), Pos (..), Scalar (..), decodeNod
 import Data.YAML.Event (tagToText)
 import System.Directory (doesFileExist)
 import System.FilePath (isAbsolute, takeDirectory, (</>))
+import Yaml.Sweep.Types (Err, noPos)
 
 ------------------------------------------------------------------------------
 -- Cache types
@@ -32,13 +33,13 @@ data LoadStatus = InProgress | Done (Node Pos)
 
 type CacheState = Map.Map FilePath LoadStatus
 
-type LoadMonad = ExceptT String (StateT CacheState IO)
+type LoadMonad = ExceptT Err (StateT CacheState IO)
 
 ------------------------------------------------------------------------------
 -- File loading
 ------------------------------------------------------------------------------
 
-loadAndCache :: FilePath -> IO (Either String YamlCache)
+loadAndCache :: FilePath -> IO (Either Err YamlCache)
 loadAndCache rootPath = evalStateT (runExceptT (processFile [] rootPath)) Map.empty
 
 processFile :: [StackFrame] -> FilePath -> LoadMonad YamlCache
@@ -46,8 +47,11 @@ processFile stack path = do
   cache <- get
   case Map.lookup path cache of
     Just InProgress -> do
-      let cycleStr = formatCycle stack path
-      throwError [i|Cycle detected: #{cycleStr}|]
+      let (refPos, refFile) = case stack of
+            (f : _) -> (sfPos f, sfFile f)
+            [] -> (noPos, path)
+          cycleStr = formatCycle stack path
+      throwError (cycleStr, refPos, refFile)
     Just (Done _) -> pure Map.empty
     Nothing -> loadNewFile stack path
 
@@ -58,8 +62,8 @@ loadNewFile stack path = do
   unless exists $ throwError (formatFileNotFoundError stack path)
   content <- liftIO $ BL.fromStrict <$> readFileBS path
   node <- case decodeNode content of
-    Left (pos, err) -> throwError [i|YAML parse error in #{path} at line #{posLine pos}: #{err}|]
-    Right [] -> throwError [i|Empty YAML document: #{path}|]
+    Left (pos, err) -> throwError ([i|YAML parse error: #{err}|], pos, path)
+    Right [] -> throwError ([i|empty YAML document|], noPos, path)
     Right (doc : _) -> pure (docRoot doc)
   let baseDir = takeDirectory path
       refs = nubBy ((==) `on` refPath) (findRefs baseDir node)
@@ -98,27 +102,27 @@ findRefs baseDir = \case
 -- Error formatting
 ------------------------------------------------------------------------------
 
-formatCycle :: [StackFrame] -> FilePath -> String
+formatSource :: FilePath -> Pos -> String
+formatSource file pos = [i|#{file}:#{posLine pos}:#{posColumn pos}|]
+
+formatCycle :: [StackFrame] -> FilePath -> Text
 formatCycle stack path =
   let chain = reverse (path : map sfFile stack)
       chainStr = T.intercalate " -> " (map toText chain)
-   in [i|#{chainStr}|]
+   in [i|Cycle detected: #{chainStr}|]
 
-formatFileNotFoundError :: [StackFrame] -> FilePath -> String
-formatFileNotFoundError [] path = [i|Config file not found: #{path}|]
+formatFileNotFoundError :: [StackFrame] -> FilePath -> Err
+formatFileNotFoundError [] path = ([i|file not found: #{path}|], noPos, path)
 formatFileNotFoundError (frame : rest) path =
-  let header :: String
-      header = [i|Config file not found: #{path}|]
-      refChain = formatStack (frame : rest)
-   in [i|#{header}\nReferenced in:\n#{refChain}|]
+  let refChain = formatStack (frame : rest)
+   in ([i|file not found: #{path}\nReferenced in:\n#{refChain}|], sfPos frame, sfFile frame)
 
 formatStack :: [StackFrame] -> String
 formatStack [] = ""
 formatStack (frame : rest) =
-  let line = posLine (sfPos frame)
-      col = posColumn (sfPos frame)
+  let pos = sfPos frame
       file = sfFile frame
-      thisFrame = [i|  - #{file} at line #{line}, column #{col}|]
+      thisFrame = [i|  - #{formatSource file pos}|]
    in case rest of
         [] -> thisFrame
         _ -> thisFrame <> "\n" <> formatStack rest
@@ -127,6 +131,7 @@ formatStack (frame : rest) =
 -- Shared helpers (re-exported for Parser)
 ------------------------------------------------------------------------------
 
+-- | get Node annotation
 nodeAnn :: Node a -> a
 nodeAnn = \case
   Scalar a _ -> a
@@ -141,13 +146,6 @@ scalarText _ = Nothing
 
 lookupScalar :: Mapping Pos -> Text -> Maybe Text
 lookupScalar m key = join (listToMaybe [scalarText v | (k, v) <- Map.toList m, scalarText k == Just key])
-
-nodeKey :: FilePath -> Node Pos -> Either String Text
-nodeKey currentFile k = case scalarText k of
-  Just t -> Right t
-  Nothing ->
-    let pos = nodeAnn k
-     in Left [i|Mapping keys must be scalars (in #{currentFile} at line #{posLine pos}, column #{posColumn pos})|]
 
 resolvePath :: FilePath -> FilePath -> FilePath
 resolvePath baseDir p

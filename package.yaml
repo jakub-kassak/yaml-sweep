@@ -9,7 +9,7 @@ description:
   .
   The entry point is `Yaml.Sweep.loadConfigValue`, which reads a YAML file,
   resolves all custom tags, expands all sweep points, and returns one
-  `Yaml.Sweep.SweepResult` per resulting configuration variant.
+  `Data.YAML.Node Pos` per resulting configuration variant.
   .
   See the `README.md` for usage examples and the `CHANGELOG.md` for revision
   history.
@@ -53,7 +53,6 @@ dependencies:
     version: '>= 1.2 && < 1.3'
     mixin:
       - (Relude as Prelude)
-  - aeson >= 2.0 && < 2.3
   - bytestring >= 0.11 && < 0.13
   - containers >= 0.6 && < 0.8
   - deepseq >= 1.4 && < 1.6
@@ -61,12 +60,9 @@ dependencies:
   - filepath >= 1.4 && < 1.6
   - HsYAML >= 0.2 && < 0.3
   - mtl >= 2.2 && < 2.4
-  - scientific >= 0.3 && < 0.4
   - string-interpolate >= 0.3 && < 0.4
   - text >= 1.2 && < 2.2
   - transformers >= 0.5 && < 0.7
-  - unordered-containers >= 0.2 && < 0.3
-  - vector >= 0.12 && < 0.14
 
 library:
   source-dirs:
@@ -93,12 +89,8 @@ tests:
     dependencies:
       - yaml-sweep
       - hspec >= 2.0 && < 2.12
-      - aeson >= 2.0 && < 2.3
-      - text >= 1.2 && < 2.2
-      - directory >= 1.3 && < 1.4
-      - filepath >= 1.4 && < 1.6
       - temporary >= 1.3 && < 1.4
-      - yaml >= 0.11 && < 0.12
+      - directory >= 1.3 && < 1.4
     ghc-options:
       - -threaded
       - -rtsopts
@@ -131,9 +123,3 @@ executables:
     source-dirs: app
     dependencies:
       - yaml-sweep
-      - aeson >= 2.0 && < 2.3
-      - aeson-pretty >= 0.8 && < 0.9
-      - bytestring >= 0.11 && < 0.13
-      - filepath >= 1.4 && < 1.6
-      - text >= 1.2 && < 2.2
-      - yaml >= 0.11 && < 0.12

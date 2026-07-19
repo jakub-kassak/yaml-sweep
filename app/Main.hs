@@ -1,24 +1,18 @@
 module Main where
 
-import Yaml.Sweep
-import Data.Aeson (encode)
-import qualified Data.ByteString.Char8 as BS
-import System.FilePath (takeExtension)
-import qualified Data.Yaml as Yaml
+import Data.ByteString.Char8 qualified as BS
+import Data.YAML (Doc (..), encodeNode)
+import Yaml.Sweep (loadConfigValue)
+import Yaml.Sweep.Types (renderErr)
 
 main :: IO ()
 main = do
   args <- getArgs
-  case args of
-    [path] -> do
-      result <- loadConfigValue path
-      case result of
-        Left err -> die $ "Fehler beim Laden/Expandieren:\n" <> err
-        Right results -> do
-          putTextLn $ "Erfolgreich generierte Varianten (" <> show (length results) <> "):\n"
-          forM_ (zip [(1::Int)..] results) $ \(i, SweepResult val) -> do
-            putTextLn $ "--- Variante " <> show i <> " ---"
-            BS.putStrLn (Yaml.encode val)
-            putTextLn ""
-    _ -> do
-      die "Verwendung: yaml-sweep-cli <pfad-zur-yaml-datei>"
+  path <- case args of
+    [p] -> pure p
+    _ -> die "Usage: yaml-sweep-cli <path-to-yaml-file>"
+
+  results <- loadConfigValue path >>= either (die . renderErr) pure
+  forM_ (zip [(1 :: Int) ..] results) $ \(i, node) -> do
+    putTextLn $ "---"
+    BS.putStr (toStrict (encodeNode [Doc (void node)]))

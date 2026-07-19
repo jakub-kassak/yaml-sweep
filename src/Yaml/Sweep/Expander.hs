@@ -4,43 +4,65 @@
 -- | Pass 2: Scope resolution and sweep expansion.
 module Yaml.Sweep.Expander
   ( resolveAndExpand,
-    exprToValue,
   )
 where
 
 import Control.Monad (foldM)
-import Data.Aeson
-import Data.Aeson.Key qualified as Key
-import Data.Aeson.KeyMap qualified as KM
 import Data.IntMap.Strict qualified as IM
 import Data.List (foldl1')
 import Data.Map.Strict qualified as M
+import Data.String.Interpolate qualified as I
 import Data.Text qualified as T
-import Data.Vector qualified as V
-import Data.YAML (Pos (..))
+import Data.YAML (Node (..), Pos (..))
+import Data.YAML.Event (Tag, mkTag)
 import Yaml.Sweep.Types
+  ( ConfigExpr (..),
+    Err,
+    ScopeEntry (..),
+    ScopeEnv (..),
+    emptyScopeEnv,
+    incScopeDepth,
+    scopeInsert,
+    scopeLookup,
+    scopeMember,
+  )
+
+------------------------------------------------------------------------------
+-- Tags not re-exported by the public "Data.YAML" module
+------------------------------------------------------------------------------
+
+yamlTagMap :: Tag
+yamlTagMap = mkTag "tag:yaml.org,2002:map"
+
+yamlTagSeq :: Tag
+yamlTagSeq = mkTag "tag:yaml.org,2002:seq"
+
+noPos :: Pos
+noPos = Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}
 
 ------------------------------------------------------------------------------
 -- Top-level entry point
 ------------------------------------------------------------------------------
 
-resolveAndExpand :: ConfigExpr -> Either String [SweepResult]
+resolveAndExpand :: ConfigExpr -> Either Err [Node Pos]
 resolveAndExpand root =
-  expand 0 M.empty (CEArray [root]) <&> \case
-    Just (Single (SVArray im)) -> IM.elems im & map (SweepResult . sweepToValue)
-    _ -> error "unreachable"
+  expand (emptyScopeEnv "") (CEArray noPos [root])
+    <&> \case
+      Just (Single (SVArray _ im)) -> Right (IM.elems im & map sweepToNode)
+      _ -> Left ([I.i|sweep expansion produced no top-level array|], noPos, "")
+    & join
 
 ------------------------------------------------------------------------------
 -- Helper data structures
 ------------------------------------------------------------------------------
 
 data SweepValue
-  = SVScalar Value
-  | SVObject (KM.KeyMap SweepValue)
-  | SVArray (IM.IntMap SweepValue)
+  = SVScalar !(Node Pos)
+  | SVObject !Pos !(M.Map (Node ()) (Pos, SweepValue))
+  | SVArray !Pos !(IM.IntMap SweepValue)
   deriving (Show, Eq)
 
-data SweepVariant a = Single a | Expand (M.Map T.Text [a])
+data SweepVariant a = Single a | Expand (M.Map Text [a])
   deriving (Show)
 
 instance Functor SweepVariant where
@@ -52,102 +74,101 @@ instance Functor SweepVariant where
 ------------------------------------------------------------------------------
 
 mergeDeep :: SweepValue -> SweepValue -> SweepValue
-mergeDeep (SVObject o1) (SVObject o2) = SVObject (KM.unionWith mergeDeep o1 o2)
-mergeDeep (SVArray a1) (SVArray a2) = SVArray (IM.unionWith mergeDeep a1 a2)
+mergeDeep (SVObject p1 o1) (SVObject _ o2) = SVObject p1 (M.unionWith (fmap . mergeDeep . snd) o1 o2)
+mergeDeep (SVArray p1 a1) (SVArray _ a2) = SVArray p1 (IM.unionWith mergeDeep a1 a2)
 mergeDeep _ v2 = v2
 
 ------------------------------------------------------------------------------
 -- Pass 1: preScan
 ------------------------------------------------------------------------------
 
-preScan :: ScopeEnv -> Int -> ConfigExpr -> Either String ScopeEnv
-preScan env depth = \case
+preScan :: ScopeEnv -> ConfigExpr -> Either Err ScopeEnv
+preScan env = \case
   CEScalar _ -> Right env
-  CEFileBarrier _ -> Right env
-  CEArray _ -> Right env
-  CEKeyDecl name pos _ ->
-    case M.lookup name env of
+  CEFileBarrier _ _ _ -> Right env
+  CEArray _ _ -> Right env
+  CEKeyDecl name pos ->
+    case scopeLookup name env of
       Just entry
-        | seScopeIdx entry < depth ->
-            Left ("shadowing: " <> T.unpack name <> " was declared in an outer scope")
+        | seDepth entry < depth env ->
+            Left ([I.i|shadowing: '#{name}' was declared in an outer scope|], sePos entry, seFile entry)
         | seIsExplicit entry ->
-            Left ("double definition: " <> T.unpack name <> " was already declared at the same scope")
-      _ -> Right (M.insert name (ScopeEntry True pos depth) env)
-  CEObject fields -> foldlM ((. snd) . preScanAcc) env fields
-  CEZip _ pos name exprs ->
-    (env M.!? name)
-      & maybe (M.insert name (ScopeEntry False pos depth) env) (const env)
-      & flip (foldlM preScanAcc) exprs
-  CEProd fp pos exprs ->
-    M.insert (freshKey fp pos) (ScopeEntry False pos depth) env
-      & flip (foldlM preScanAcc) exprs
+            Left ([I.i|double definition: '#{name}' was already declared at the same scope|], sePos entry, seFile entry)
+      _ -> Right (scopeInsert name (ScopeEntry True pos (path env) (depth env)) env)
+  CEObject _ fields -> foldlM preScan env (snd <$> M.elems fields)
+  CEZip pos name exprs ->
+    scopeInsertIfMissing name (ScopeEntry False pos (path env) (depth env)) env
+      & flip (foldlM preScan) exprs
+  CEProd _ exprs ->
+    foldlM preScan env exprs
   where
-    preScanAcc = preScan ?? depth
+    scopeInsertIfMissing name entry e =
+      maybe (scopeInsert name entry e) (const e) (scopeLookup name e)
 
 ------------------------------------------------------------------------------
 -- Pass 2: expand
 ------------------------------------------------------------------------------
 
-expand :: Int -> ScopeEnv -> ConfigExpr -> Either String (Maybe (SweepVariant SweepValue))
-expand depth env = \case
-  CEScalar v -> v & SVScalar & Single & Just & Right
+expand :: ScopeEnv -> ConfigExpr -> Either Err (Maybe (SweepVariant SweepValue))
+expand env = \case
+  CEScalar node -> node & SVScalar & Single & Just & Right
   CEKeyDecl {} -> Right Nothing
-  CEObject keyedFields ->
-    traverse (traverse (expand depth env)) keyedFields
-      <&> (\fs -> [fmap (singletonObj k) v | (k, Just v) <- fs])
-      >>= foldM merge (Single $ SVObject KM.empty)
+  CEObject pos keyedFields ->
+    traverse (traverse (expand env)) keyedFields
+      <&> M.mapMaybeWithKey (\k (p, mv) -> fmap (singletonObj pos k p) <$> mv)
+      <&> M.elems
+      >>= foldM (merge pos) (Single $ SVObject pos M.empty)
         <&> Just
-  CEArray items ->
+  CEArray pos items ->
     mapM expandElem items
       <&> catMaybes
       <&> concatMap (expandLocalScopes env)
       <&> zip [0 ..]
-      <&> map (\(i, v) -> fmap (SVArray . IM.singleton i) v)
-      >>= foldM merge (Single $ SVArray IM.empty)
+      <&> map (\(i, v) -> fmap (SVArray pos . IM.singleton i) v)
+      >>= foldM (merge pos) (Single (SVArray pos IM.empty))
         <&> Just
-  CEZip _ _ key items ->
-    mapM (expand depth env) items
+  CEZip pos key items ->
+    mapM (expand env) items
       <&> catMaybes
-      >>= traverse mergeSingle
-        <&> M.singleton key
-        <&> Expand
-        <&> Just
-  CEProd fp pos items ->
-    expand depth env (CEZip fp pos (freshKey fp pos) items)
-  CEFileBarrier inner ->
-    expand 0 M.empty inner >>= traverse (fmap Single . mergeSingle)
+      >>= traverse (mergeSingle (zipErrMsg, pos, path env))
+        <&> (Just . Expand . M.singleton key)
+  CEProd pos items ->
+    expand env (CEZip pos (freshKey (path env) pos) items)
+  CEFileBarrier pos fp inner ->
+    expand (emptyScopeEnv fp) inner >>= traverse (fmap Single . mergeSingle (fbErrMsg, pos, fp))
   where
-    expandElem e = preScan env (depth + 1) e >>= (expand (depth + 1) ?? e)
+    env' = incScopeDepth env
+    expandElem e = preScan env' e >>= flip expand e
 
-    mergeSingle (Single v) = Right v
-    mergeSingle (Expand _) = Left "Zip over zip boundary is not supported"
+    mergeSingle _ (Single v) = Right v
+    mergeSingle err (Expand _) = Left err
+    fbErrMsg = "Top level keys in included file is not allowed"
+    zipErrMsg = "Zip over zip boundary is not supported"
 
-    singletonObj k v = SVObject (KM.singleton (Key.fromText k) v)
+    singletonObj pos k p v = SVObject pos (M.singleton k (p, v))
 
-zipEqual :: [a] -> [b] -> Either String [(a, b)]
-zipEqual xs ys
-  | length xs == length ys = Right (zip xs ys)
-  | otherwise = Left "inconsistent lengths"
+merge :: Pos -> SweepVariant SweepValue -> SweepVariant SweepValue -> Either Err (SweepVariant SweepValue)
+merge _ (Single a1) (Single a2) = a1 `mergeDeep` a2 & Single & Right
+merge _ (Single a) e@(Expand _) = fmap (a `mergeDeep`) e & Right
+merge _ e@(Expand _) (Single a) = fmap (`mergeDeep` a) e & Right
+merge pos (Expand e1) (Expand e2) = foldM combine e1 (M.toList e2) <&> Expand
+  where
+    combine accMap (k, ys) = M.alterF (update k ys) k accMap
+
+    update _ ys Nothing = Right (Just ys)
+    update k ys (Just xs)
+      | length xs == length ys = Right (Just (zipWith mergeDeep xs ys))
+      | otherwise = Left ([I.i|inconsistent lengths for scope '#{k}'|], pos, "")
 
 expandLocalScopes :: ScopeEnv -> SweepVariant SweepValue -> [SweepVariant SweepValue]
 expandLocalScopes _ s@(Single _) = [s]
 expandLocalScopes env (Expand m)
   | M.null notInEnv = [Expand m]
   | M.null inEnv = mergedLocals & map Single
-  | otherwise = mergedLocals & map (\loc -> fmap (`mergeDeep` loc) (Expand inEnv))
+  | otherwise = mergedLocals & map (\sv -> fmap (`mergeDeep` sv) (Expand inEnv))
   where
-    (inEnv, notInEnv) = M.partitionWithKey (\k _ -> M.member k env) m
+    (inEnv, notInEnv) = M.partitionWithKey (\k _ -> scopeMember k env) m
     mergedLocals = M.elems notInEnv & sequence & map (foldl1' mergeDeep)
-
-merge :: SweepVariant SweepValue -> SweepVariant SweepValue -> Either String (SweepVariant SweepValue)
-merge (Single a1) (Single a2) = a1 `mergeDeep` a2 & Single & Right
-merge (Single a) e@(Expand _) = fmap (a `mergeDeep`) e & Right
-merge e@(Expand _) (Single a) = fmap (`mergeDeep` a) e & Right
-merge (Expand e1) (Expand e2) = foldM combine e1 (M.toList e2) <&> Expand
-  where
-    combine accMap (k, ys) = M.alterF (update ys) k accMap
-    update ys Nothing = Right (Just ys)
-    update ys (Just xs) = zipEqual xs ys <&> map (uncurry mergeDeep) <&> Just
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -162,10 +183,12 @@ freshKey file pos =
     & T.pack
     & ("__prod_" <>)
 
-sweepToValue :: SweepValue -> Value
-sweepToValue (SVScalar v) = v
-sweepToValue (SVObject o) = Object (fmap sweepToValue o)
-sweepToValue (SVArray a) = IM.elems a & map sweepToValue & V.fromList & Array
-
-exprToValue :: ConfigExpr -> Either String Value
-exprToValue _ = Left "exprToValue should use resolveAndExpand"
+sweepToNode :: SweepValue -> Node Pos
+sweepToNode (SVScalar s) = s
+sweepToNode (SVObject pos keyValues) =
+  Mapping
+    pos
+    yamlTagMap
+    (M.fromList [(fmap (const p) k, sweepToNode v) | (k, (p, v)) <- M.toList keyValues])
+sweepToNode (SVArray pos im) =
+  Sequence pos yamlTagSeq (map sweepToNode (IM.elems im))

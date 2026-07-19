@@ -10,27 +10,25 @@
 --   * @!prod@ is sugar for a fresh unique scope — always one occurrence.
 --   * @!include@ and @!inherit@ both create file boundaries.
 module Yaml.Sweep
-  ( SweepResult (..),
-    loadConfigValue,
+  ( loadConfigValue,
   )
 where
 
 import Data.Map.Strict qualified as Map
 import Data.String.Interpolate (i)
+import Data.YAML (Node, Pos)
 
 import Yaml.Sweep.Expander (resolveAndExpand)
 import Yaml.Sweep.Loader (loadAndCache)
 import Yaml.Sweep.Parser (nodeToExpr)
-import Yaml.Sweep.Types (SweepResult (..))
-
-note :: e -> Maybe a -> Either e a
-note e = maybe (Left e) Right
+import Yaml.Sweep.Types (Err, noPos, note)
 
 -- | Load a YAML config file, resolve !include/!inherit, expand !prod/!zip.
---   Returns a list of SweepResults (one per combination).
-loadConfigValue :: FilePath -> IO (Either String [SweepResult])
+--   Returns one 'Node Pos' per resulting configuration variant.  Mapping
+--   keys keep their source positions; see README.md for details.
+loadConfigValue :: FilePath -> IO (Either Err [Node Pos])
 loadConfigValue yamlFile = runExceptT do
   cache <- ExceptT $ loadAndCache yamlFile
-  rootNode <- ExceptT $ pure $ note [i|Main file not in cache: #{yamlFile}|] (Map.lookup yamlFile cache)
+  rootNode <- ExceptT $ pure $ note ([i|Main file not in cache: #{yamlFile}|], noPos, yamlFile) (Map.lookup yamlFile cache)
   scoped <- ExceptT $ pure $ nodeToExpr cache yamlFile rootNode
   ExceptT . pure $ resolveAndExpand scoped
