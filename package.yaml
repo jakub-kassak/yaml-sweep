@@ -119,3 +119,11 @@ executables:
     source-dirs: app
     dependencies:
       - yaml-sweep
+  yaml-sweep-json:
+    main: Main.hs
+    source-dirs: app/json
+    dependencies:
+      - aeson >= 2.0 && < 2.3
+      - scientific >= 0.3 && < 0.4
+      - vector >= 0.12 && < 0.14
+      - yaml-sweep

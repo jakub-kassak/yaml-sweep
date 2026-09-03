@@ -28,8 +28,76 @@ extra-doc-files:
     README.md
     CHANGELOG.md
     docs/test-10-nested-bfs.md
-    examples/**/*.yaml
-    examples/**/*.txt
+    examples/01-simple/config.yaml
+    examples/01-simple/result.yaml
+    examples/02-prod/config.yaml
+    examples/02-prod/result.yaml
+    examples/03-prod-cartesian/config.yaml
+    examples/03-prod-cartesian/result.yaml
+    examples/04-bubble-one-level-up/config.yaml
+    examples/04-bubble-one-level-up/result.yaml
+    examples/05-zip-same-element/config.yaml
+    examples/05-zip-same-element/result.yaml
+    examples/06-zip-different-elems/config.yaml
+    examples/06-zip-different-elems/result.yaml
+    examples/07-zip-key-cross-element/config.yaml
+    examples/07-zip-key-cross-element/result.yaml
+    examples/08-nested-zip/config.yaml
+    examples/08-nested-zip/result.yaml
+    examples/09-key-different-lengths-error/config.yaml
+    examples/09-key-different-lengths-error/error.txt
+    examples/10-key-shadowing-error/config.yaml
+    examples/10-key-shadowing-error/error.txt
+    examples/11-double-key-definition/config.yaml
+    examples/11-double-key-definition/error.txt
+    examples/12-different-keys-product/config.yaml
+    examples/12-different-keys-product/result.yaml
+    examples/13-mixed-scopes/config.yaml
+    examples/13-mixed-scopes/result.yaml
+    examples/14-nested-two-keys/config.yaml
+    examples/14-nested-two-keys/result.yaml
+    examples/15-nested-key-scopes/config.yaml
+    examples/15-nested-key-scopes/result.yaml
+    examples/16-include/config.yaml
+    examples/16-include/dir/include-from-dir.yaml
+    examples/16-include/include.yaml
+    examples/16-include/result.yaml
+    examples/17-inherit/config.yaml
+    examples/17-inherit/inherit.yaml
+    examples/17-inherit/result.yaml
+    examples/18-include-file-barrier/config.yaml
+    examples/18-include-file-barrier/inner.yaml
+    examples/18-include-file-barrier/result.yaml
+    examples/19-include-with-top-level-key/config.yaml
+    examples/19-include-with-top-level-key/error.txt
+    examples/19-include-with-top-level-key/inner.yaml
+    examples/20-include-local-in-array/config.yaml
+    examples/20-include-local-in-array/inner.yaml
+    examples/20-include-local-in-array/result.yaml
+    examples/21-include-plain-alongside-sweeps/config.yaml
+    examples/21-include-plain-alongside-sweeps/inner.yaml
+    examples/21-include-plain-alongside-sweeps/result.yaml
+    examples/22-prod-empty-list-error/config.yaml
+    examples/22-prod-empty-list-error/error.txt
+    examples/23-zip-empty-scope-name-error/config.yaml
+    examples/23-zip-empty-scope-name-error/error.txt
+    examples/24-zip-empty-list-error/config.yaml
+    examples/24-zip-empty-list-error/error.txt
+    examples/25-key-empty-name-error/config.yaml
+    examples/25-key-empty-name-error/error.txt
+    examples/26-inherit-no-base-error/config.yaml
+    examples/26-inherit-no-base-error/error.txt
+    examples/27-yaml-parse-error/config.yaml
+    examples/27-yaml-parse-error/error.txt
+    examples/28-empty-yaml-document-error/config.yaml
+    examples/28-empty-yaml-document-error/error.txt
+    examples/29-include-file-not-found-error/config.yaml
+    examples/29-include-file-not-found-error/error.txt
+    examples/30-include-cycle-error/config.yaml
+    examples/30-include-cycle-error/error.txt
+    examples/30-include-cycle-error/inner.yaml
+    examples/31-zip-over-zip-boundary-error/config.yaml
+    examples/31-zip-over-zip-boundary-error/error.txt
 
 source-repository head
   type: git
@@ -119,6 +187,48 @@ executable yaml-sweep-cli
     , string-interpolate ==0.3.*
     , text >=1.2 && <2.2
     , transformers >=0.5 && <0.7
+    , yaml-sweep
+  mixins:
+      base hiding (Prelude)
+    , relude (Relude as Prelude)
+  default-language: GHC2021
+
+executable yaml-sweep-json
+  main-is: Main.hs
+  other-modules:
+      Paths_yaml_sweep
+  autogen-modules:
+      Paths_yaml_sweep
+  hs-source-dirs:
+      app/json
+  default-extensions:
+      OverloadedStrings
+      DataKinds
+      QuasiQuotes
+      ViewPatterns
+      BlockArguments
+      MultiWayIf
+      OverloadedRecordDot
+      RecordWildCards
+      TypeFamilies
+      LambdaCase
+      StrictData
+  build-depends:
+      HsYAML ==0.2.*
+    , aeson >=2.0 && <2.3
+    , base >=4.7 && <5
+    , bytestring >=0.11 && <0.13
+    , containers >=0.6 && <0.8
+    , deepseq >=1.4 && <1.6
+    , directory ==1.3.*
+    , filepath >=1.4 && <1.6
+    , mtl >=2.2 && <2.4
+    , relude ==1.2.*
+    , scientific ==0.3.*
+    , string-interpolate ==0.3.*
+    , text >=1.2 && <2.2
+    , transformers >=0.5 && <0.7
+    , vector >=0.12 && <0.14
     , yaml-sweep
   mixins:
       base hiding (Prelude)

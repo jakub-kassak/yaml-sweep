@@ -68,7 +68,7 @@ are two kinds:
   [examples/15-nested-key-scopes](examples/15-nested-key-scopes).
 
 - **Local (implicit) scope** — a `!zip_<name>` tag used without a
-  matching `!key <name>` declaration. The scope is local the 
+  matching `!key <name>` declaration. The scope is local the
   nearest enclosing array element: markers inside *the same* element
   sharing the same name are index-linked, while markers in *different*
   sibling elements form independent local scopes (even with the same

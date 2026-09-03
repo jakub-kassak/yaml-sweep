@@ -13,6 +13,6 @@ main = do
     _ -> die "Usage: yaml-sweep-cli <path-to-yaml-file>"
 
   results <- loadConfigValue path >>= either (die . renderErr) pure
-  forM_ (zip [(1 :: Int) ..] results) $ \(i, node) -> do
-    putTextLn $ "---"
+  forM_ results $ \node -> do
+    putTextLn "---"
     BS.putStr (toStrict (encodeNode [Doc (void node)]))
