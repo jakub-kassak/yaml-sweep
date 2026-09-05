@@ -98,6 +98,9 @@ extra-doc-files:
     examples/30-include-cycle-error/inner.yaml
     examples/31-zip-over-zip-boundary-error/config.yaml
     examples/31-zip-over-zip-boundary-error/error.txt
+    examples/32-inherit-sweep-boundary/base.yaml
+    examples/32-inherit-sweep-boundary/config.yaml
+    examples/32-inherit-sweep-boundary/result.yaml
 
 source-repository head
   type: git

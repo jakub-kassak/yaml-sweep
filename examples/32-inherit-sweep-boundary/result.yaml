@@ -1,0 +1,23 @@
+base_left: base-a
+base_right: base-A
+child: child-1
+---
+base_left: base-a
+base_right: base-A
+child: child-2
+---
+base_left: base-a
+base_right: base-A
+child: child-3
+---
+base_left: base-b
+base_right: base-B
+child: child-1
+---
+base_left: base-b
+base_right: base-B
+child: child-2
+---
+base_left: base-b
+base_right: base-B
+child: child-3

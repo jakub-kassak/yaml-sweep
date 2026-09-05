@@ -124,9 +124,11 @@ top-level documents. Each array acts as a boundary — sweeps do not
 declared in the outer file do not leak into the included/inherited
 file, and vice-versa. An included file may declare its own `!key` and
 `!zip` scopes that are fully resolved inside the include before
-splicing. However, an included/inherited file is **not** allowed to
-emit top-level keys of its own — its content must be a single value
-  that gets spliced into the parent structure. See
+splicing. An included file is **not** allowed to emit top-level sweep
+variants — its content must be a single value that gets spliced into
+the parent structure. An inherited base and its child may each contain
+sweeps. Their scopes remain isolated and their variants are combined
+after the deep merge. See
   [examples/18-include-file-barrier](examples/18-include-file-barrier) (independent scope inside an
   include), [examples/19-include-with-top-level-key](examples/19-include-with-top-level-key) (rejected: top
   level keys in included file).

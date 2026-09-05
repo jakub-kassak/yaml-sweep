@@ -1,0 +1,4 @@
+# The base's scope is internally linked.
+!key pair:
+base_left: !zip_pair [base-a, base-b]
+base_right: !zip_pair [base-A, base-B]

@@ -29,6 +29,10 @@ data ConfigExpr
   | CEZip !Pos !Text ![ConfigExpr]
   | CEKeyDecl !Text !Pos
   | CEFileBarrier !Pos !FilePath !ConfigExpr
+  -- | An inherited base is expanded in its own scope and then deep-merged
+  -- with the child expression.  Unlike an include, the child may contain a
+  -- top-level sweep after inheritance.
+  | CEInherit !Pos !FilePath !ConfigExpr !ConfigExpr
   deriving (Show, Eq)
 
 ------------------------------------------------------------------------------

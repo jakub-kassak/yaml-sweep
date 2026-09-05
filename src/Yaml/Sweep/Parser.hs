@@ -45,7 +45,7 @@ nodeToExpr cache currentFile node = case node of
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" -> do
         merged <- resolveInherit cache currentFile pos mapping
-        pure (CEFileBarrier pos currentFile merged)
+        pure merged
   Mapping _ _ mapping -> do
     fields <- traverse (processMappingKey cache currentFile) (Map.toList mapping)
     pure (CEObject (nodeAnn node) (Map.fromList fields))
@@ -99,7 +99,7 @@ resolveInherit cache currentFile pos mapping = do
   baseExpr <- nodeToExpr cache basePath baseNode
   let overrideMapping = Map.filterWithKey (\k _ -> scalarText k /= Just "base") mapping
   overrideFields <- traverse (processMappingKey cache currentFile) (Map.toList overrideMapping)
-  pure (deepMerge baseExpr (CEObject pos (Map.fromList overrideFields)))
+  pure (CEInherit pos basePath baseExpr (CEObject pos (Map.fromList overrideFields)))
 
 -- | Deep-merge two 'ConfigExpr' trees.  On mapping-key collision the
 -- position of the *second* (override) side wins, while the values are
@@ -107,6 +107,7 @@ resolveInherit cache currentFile pos mapping = do
 -- equality is purely structural.
 deepMerge :: ConfigExpr -> ConfigExpr -> ConfigExpr
 deepMerge (CEFileBarrier _ _ inner) override = deepMerge inner override
+deepMerge (CEInherit _ _ base inner) override = deepMerge (deepMerge base inner) override
 deepMerge (CEObject _ base) (CEObject overridePos override) = CEObject overridePos (mergeObj base override)
   where
     mergeObj = Map.unionWith \(_, v1) (pos2, v2) -> (pos2, deepMerge v1 v2)

@@ -1,0 +1,5 @@
+# The child's equally named scope is independent across the inheritance
+# boundary, so this produces 2 base variants × 3 child variants.
+--- !inherit
+base: base.yaml
+child: !zip_pair [child-1, child-2, child-3]

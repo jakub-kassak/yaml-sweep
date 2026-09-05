@@ -86,6 +86,7 @@ preScan :: ScopeEnv -> ConfigExpr -> Either Err ScopeEnv
 preScan env = \case
   CEScalar _ -> Right env
   CEFileBarrier _ _ _ -> Right env
+  CEInherit _ _ _ override -> preScan env override
   CEArray _ _ -> Right env
   CEKeyDecl name pos ->
     case scopeLookup name env of
@@ -136,6 +137,18 @@ expand env = \case
     expand env (CEZip pos (freshKey (path env) pos) items)
   CEFileBarrier pos fp inner ->
     expand (emptyScopeEnv fp) inner >>= traverse (fmap Single . mergeSingle (fbErrMsg, pos, fp))
+  CEInherit pos baseFile base override -> do
+    -- The inherited base owns its scopes.  Namespace them before merging so
+    -- an equally named child scope is independent rather than accidentally
+    -- zip-linked across the file boundary.
+    baseEnv <- preScan (emptyScopeEnv baseFile) base
+    baseValue <- expand baseEnv base
+    overrideValue <- expand env override
+    case (baseValue, overrideValue) of
+      (Nothing, value) -> Right value
+      (Just baseConfig, Nothing) -> Right (Just (namespaceInheritedScopes baseFile baseConfig))
+      (Just baseConfig, Just overrideConfig) ->
+        Just <$> merge pos (namespaceInheritedScopes baseFile baseConfig) overrideConfig
   where
     env' = incScopeDepth env
     expandElem e = preScan env' e >>= flip expand e
@@ -146,6 +159,11 @@ expand env = \case
     zipErrMsg = "Zip over zip boundary is not supported"
 
     singletonObj pos k p v = SVObject pos (M.singleton k (p, v))
+
+namespaceInheritedScopes :: FilePath -> SweepVariant a -> SweepVariant a
+namespaceInheritedScopes _ single@(Single _) = single
+namespaceInheritedScopes baseFile (Expand scopes) =
+  Expand (M.mapKeys (\scope -> "__inherit_" <> T.pack baseFile <> "::" <> scope) scopes)
 
 merge :: Pos -> SweepVariant SweepValue -> SweepVariant SweepValue -> Either Err (SweepVariant SweepValue)
 merge _ (Single a1) (Single a2) = a1 `mergeDeep` a2 & Single & Right
