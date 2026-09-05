@@ -21,11 +21,18 @@ handlers =
     [ LSP.notificationHandler LSP.SMethod_Initialized (const pass),
       LSP.requestHandler LSP.SMethod_TextDocumentDefinition definitionHandler,
       LSP.requestHandler LSP.SMethod_TextDocumentHover hoverHandler,
+      LSP.requestHandler LSP.SMethod_TextDocumentSemanticTokensFull semanticTokensHandler,
       LSP.notificationHandler LSP.SMethod_TextDocumentDidOpen didOpenHandler,
       LSP.notificationHandler LSP.SMethod_TextDocumentDidChange didChangeHandler,
       LSP.notificationHandler LSP.SMethod_TextDocumentDidSave didSaveHandler,
       LSP.notificationHandler LSP.SMethod_TextDocumentDidClose didCloseHandler
     ]
+
+semanticTokensHandler ::
+  LSP.TRequestMessage LSP.Method_TextDocumentSemanticTokensFull ->
+  (Either (LSP.TResponseError LSP.Method_TextDocumentSemanticTokensFull) (LSP.MessageResult LSP.Method_TextDocumentSemanticTokensFull) -> LSP.LspM ServerState ()) ->
+  LSP.LspM ServerState ()
+semanticTokensHandler _ responder = responder (Right (LSP.InR LSP.Null))
 
 definitionHandler ::
   LSP.TRequestMessage LSP.Method_TextDocumentDefinition ->
