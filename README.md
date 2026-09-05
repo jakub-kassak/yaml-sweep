@@ -202,6 +202,68 @@ the offending config and the expected message:
 | [30-include-cycle-error](examples/30-include-cycle-error) | `Cycle detected` |
 | [31-zip-over-zip-boundary-error](examples/31-zip-over-zip-boundary-error) | `Zip over zip boundary is not supported` |
 
+## Language Server (`yaml-sweep-lsp`)
+
+The bundled language server executable `yaml-sweep-lsp` communicates over stdio using the Language Server Protocol (LSP). It provides real-time validation, jump-to-definition, and inheritance inspection for `yaml-sweep` configuration files.
+
+### Features
+
+- **Go to Definition**: Jump from `!zip_<name>` markers to their corresponding `!key <name>` declaration, from `!include <file>` paths to the referenced YAML file, and from `!inherit` `base: <file>` references to the base configuration file.
+- **`!inherit` Hover**: Hover over `!inherit` or `base:` to see a structural summary of all overridden, added, and inherited fields across the full inheritance chain. Hover over an individual overridden or added key/value to view its provenance and previous values.
+- **Diagnostics**: Validates open, edited, and saved YAML documents using [`loadAndCache`](src/Yaml/Sweep/Loader.hs), reporting parse errors, missing files, circular includes, and scope inconsistencies directly in the editor.
+
+### Neovim Configuration (`nvim-lspconfig`)
+
+```lua
+local lspconfig = require('lspconfig')
+local configs = require('lspconfig.configs')
+
+if not configs.yaml_sweep then
+  configs.yaml_sweep = {
+    default_config = {
+      cmd = { 'yaml-sweep-lsp' },
+      filetypes = { 'yaml' },
+      root_dir = lspconfig.util.root_pattern('cabal.project', '.git', 'config.yaml'),
+      settings = {},
+    },
+  }
+end
+
+lspconfig.yaml_sweep.setup{}
+```
+
+### VS Code Client Configuration
+
+To integrate `yaml-sweep-lsp` with a VS Code extension using `vscode-languageclient`:
+
+```typescript
+import { ExtensionContext, workspace } from 'vscode';
+import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
+
+let client: LanguageClient;
+
+export function activate(context: ExtensionContext) {
+  const serverOptions: ServerOptions = {
+    command: 'yaml-sweep-lsp',
+    args: [],
+  };
+
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: [{ scheme: 'file', language: 'yaml' }],
+    synchronize: {
+      fileEvents: workspace.createFileSystemWatcher('**/*.yaml'),
+    },
+  };
+
+  client = new LanguageClient('yaml-sweep-lsp', 'yaml-sweep Language Server', serverOptions, clientOptions);
+  client.start();
+}
+
+export function deactivate(): Thenable<void> | undefined {
+  return client ? client.stop() : undefined;
+}
+```
+
 ## Examples
 
 The `examples/` directory contains numbered, self-contained cases.

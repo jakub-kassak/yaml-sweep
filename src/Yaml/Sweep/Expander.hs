@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 -- | Pass 2: Scope resolution and sweep expansion.
 module Yaml.Sweep.Expander
   ( resolveAndExpand,
@@ -57,9 +54,9 @@ resolveAndExpand root =
 ------------------------------------------------------------------------------
 
 data SweepValue
-  = SVScalar !(Node Pos)
-  | SVObject !Pos !(M.Map (Node ()) (Pos, SweepValue))
-  | SVArray !Pos !(IM.IntMap SweepValue)
+  = SVScalar (Node Pos)
+  | SVObject Pos (M.Map (Node ()) (Pos, SweepValue))
+  | SVArray Pos (IM.IntMap SweepValue)
   deriving (Show, Eq)
 
 data SweepVariant a = Single a | Expand (M.Map Text [a])
@@ -95,16 +92,22 @@ preScan env = \case
             Left ([I.i|shadowing: '#{name}' was declared in an outer scope|], sePos entry, seFile entry)
         | seIsExplicit entry ->
             Left ([I.i|double definition: '#{name}' was already declared at the same scope|], sePos entry, seFile entry)
-      _ -> Right (scopeInsert name (ScopeEntry True pos (path env) (depth env)) env)
+      _ -> Right (scopeInsert name (newScopeEntry True pos env) env)
   CEObject _ fields -> foldlM preScan env (snd <$> M.elems fields)
   CEZip pos name exprs ->
-    scopeInsertIfMissing name (ScopeEntry False pos (path env) (depth env)) env
+    scopeInsertIfMissing name (newScopeEntry False pos env) env
       & flip (foldlM preScan) exprs
   CEProd _ exprs ->
     foldlM preScan env exprs
   where
     scopeInsertIfMissing name entry e =
       maybe (scopeInsert name entry e) (const e) (scopeLookup name e)
+
+newScopeEntry :: Bool -> Pos -> ScopeEnv -> ScopeEntry
+newScopeEntry seIsExplicit sePos ScopeEnv {..} = ScopeEntry {..}
+  where
+    seFile = path
+    seDepth = depth
 
 ------------------------------------------------------------------------------
 -- Pass 2: expand

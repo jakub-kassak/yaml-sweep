@@ -22,24 +22,24 @@ import Data.String.Interpolate (i)
 import Data.YAML (Node, Pos (..))
 
 data ConfigExpr
-  = CEScalar !(Node Pos)
-  | CEObject !Pos !(Map (Node ()) (Pos, ConfigExpr))
-  | CEArray !Pos ![ConfigExpr]
-  | CEProd !Pos ![ConfigExpr]
-  | CEZip !Pos !Text ![ConfigExpr]
-  | CEKeyDecl !Text !Pos
-  | CEFileBarrier !Pos !FilePath !ConfigExpr
+  = CEScalar (Node Pos)
+  | CEObject Pos (Map (Node ()) (Pos, ConfigExpr))
+  | CEArray Pos [ConfigExpr]
+  | CEProd Pos [ConfigExpr]
+  | CEZip Pos Text [ConfigExpr]
+  | CEKeyDecl Text Pos
+  | CEFileBarrier Pos FilePath ConfigExpr
   -- | An inherited base is expanded in its own scope and then deep-merged
   -- with the child expression.  Unlike an include, the child may contain a
   -- top-level sweep after inheritance.
-  | CEInherit !Pos !FilePath !ConfigExpr !ConfigExpr
+  | CEInherit Pos FilePath ConfigExpr ConfigExpr
   deriving (Show, Eq)
 
 ------------------------------------------------------------------------------
 -- Path
 ------------------------------------------------------------------------------
 
-data PathStep = PSKey !Text | PSIdx !Int
+data PathStep = PSKey Text | PSIdx Int
   deriving (Show, Eq, Ord)
 
 type Path = [PathStep]
@@ -54,17 +54,17 @@ type Path = [PathStep]
 -- shadowing checks); 'path' is the file in which the current subtree
 -- originates, used for error reporting.
 data ScopeEnv = ScopeEnv
-  { bindings :: !(Map Text ScopeEntry),
-    depth    :: !Int,
-    path     :: !FilePath
+  { bindings :: Map Text ScopeEntry,
+    depth :: Int,
+    path :: FilePath
   }
   deriving (Show, Eq)
 
 data ScopeEntry = ScopeEntry
-  { seIsExplicit  :: !Bool,
-    sePos         :: !Pos,
-    seFile        :: !FilePath,
-    seDepth    :: !Int
+  { seIsExplicit :: Bool,
+    sePos :: Pos,
+    seFile :: FilePath,
+    seDepth :: Int
   }
   deriving (Show, Eq)
 
@@ -93,7 +93,10 @@ renderErr (msg, pos, file) =
 ------------------------------------------------------------------------------
 
 emptyScopeEnv :: FilePath -> ScopeEnv
-emptyScopeEnv fp = ScopeEnv {bindings = Map.empty, depth = 0, path = fp}
+emptyScopeEnv path = ScopeEnv {..}
+  where
+    bindings = Map.empty
+    depth = 0
 
 -- | Increment the nesting depth by one (bindings and path preserved).
 incScopeDepth :: ScopeEnv -> ScopeEnv

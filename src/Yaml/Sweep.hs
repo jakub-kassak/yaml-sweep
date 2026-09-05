@@ -17,9 +17,8 @@ where
 import Data.Map.Strict qualified as Map
 import Data.String.Interpolate (i)
 import Data.YAML (Node, Pos)
-
 import Yaml.Sweep.Expander (resolveAndExpand)
-import Yaml.Sweep.Loader (loadAndCache)
+import Yaml.Sweep.Loader (DocSnapshot (..), loadAndCacheSnapshots)
 import Yaml.Sweep.Parser (nodeToExpr)
 import Yaml.Sweep.Types (Err, noPos, note)
 
@@ -28,7 +27,7 @@ import Yaml.Sweep.Types (Err, noPos, note)
 --   keys keep their source positions; see README.md for details.
 loadConfigValue :: FilePath -> IO (Either Err [Node Pos])
 loadConfigValue yamlFile = runExceptT do
-  cache <- ExceptT $ loadAndCache yamlFile
-  rootNode <- ExceptT $ pure $ note ([i|Main file not in cache: #{yamlFile}|], noPos, yamlFile) (Map.lookup yamlFile cache)
-  scoped <- ExceptT $ pure $ nodeToExpr cache yamlFile rootNode
+  cache <- ExceptT $ loadAndCacheSnapshots yamlFile
+  rootSnapshot <- ExceptT $ pure $ note ([i|Main file not in cache: #{yamlFile}|], noPos, yamlFile) (Map.lookup yamlFile cache)
+  scoped <- ExceptT $ pure $ nodeToExpr cache yamlFile rootSnapshot.dsNode
   ExceptT . pure $ resolveAndExpand scoped

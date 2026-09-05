@@ -12,7 +12,8 @@ import Data.YAML (Mapping, Node (..), Pos (..), Scalar (..))
 import Data.YAML.Event (tagToText)
 import System.FilePath (takeDirectory)
 import Yaml.Sweep.Loader
-  ( YamlCache,
+  ( DocSnapshot (..),
+    YamlCache,
     lookupScalar,
     nodeAnn,
     resolvePath,
@@ -24,7 +25,6 @@ import Yaml.Sweep.Types
     note,
   )
 
-
 -- | A plain @!!str@ key node carrying no position; the source
 -- position is tracked separately in the 'CEObject' value.  Used to
 -- drop the @!key@ decoration while keeping a structural key for
@@ -35,11 +35,11 @@ nodeToExpr cache currentFile node = case node of
     | tagToText tag == Just "!include" -> do
         let baseDir = takeDirectory currentFile
             path = resolvePath baseDir (T.unpack text)
-        cachedNode <-
+        cachedSnapshot <-
           note
             ([i|!include file not in cache: #{path}|], pos, currentFile)
             (Map.lookup path cache)
-        inner <- nodeToExpr cache path cachedNode
+        inner <- nodeToExpr cache path cachedSnapshot.dsNode
         pure (CEFileBarrier pos currentFile inner)
   Scalar {} -> pure (CEScalar node)
   Mapping pos tag mapping
@@ -92,11 +92,11 @@ resolveInherit cache currentFile pos mapping = do
       (lookupScalar mapping "base")
   let baseDir = takeDirectory currentFile
       basePath = resolvePath baseDir (T.unpack baseText)
-  baseNode <-
+  baseSnapshot <-
     note
       ([i|!inherit base file not in cache: #{basePath}|], pos, currentFile)
       (Map.lookup basePath cache)
-  baseExpr <- nodeToExpr cache basePath baseNode
+  baseExpr <- nodeToExpr cache basePath baseSnapshot.dsNode
   let overrideMapping = Map.filterWithKey (\k _ -> scalarText k /= Just "base") mapping
   overrideFields <- traverse (processMappingKey cache currentFile) (Map.toList overrideMapping)
   pure (CEInherit pos basePath baseExpr (CEObject pos (Map.fromList overrideFields)))

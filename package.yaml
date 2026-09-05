@@ -55,6 +55,9 @@ dependencies:
   - directory >= 1.3 && < 1.4
   - filepath >= 1.4 && < 1.6
   - HsYAML >= 0.2 && < 0.3
+  - lens >= 5.0 && < 5.4
+  - lsp >= 2.4 && < 2.9
+  - lsp-types >= 2.4 && < 2.5
   - mtl >= 2.2 && < 2.4
   - string-interpolate >= 0.3 && < 0.4
   - text >= 1.2 && < 2.2
@@ -72,6 +75,10 @@ library:
     - Yaml.Sweep.Loader
     - Yaml.Sweep.Parser
     - Yaml.Sweep.Expander
+    - Yaml.Sweep.Lsp.Types
+    - Yaml.Sweep.Lsp.Definition
+    - Yaml.Sweep.Lsp.Inherit
+    - Yaml.Sweep.Lsp.Handler
   when:
     - condition: flag(dev-warnings)
       ghc-options:
@@ -82,6 +89,9 @@ tests:
     main: Spec.hs
     source-dirs:
       - test
+    other-modules:
+      - LspSpec
+      - Runner
     dependencies:
       - yaml-sweep
       - hspec >= 2.0 && < 2.12
@@ -126,4 +136,11 @@ executables:
       - aeson >= 2.0 && < 2.3
       - scientific >= 0.3 && < 0.4
       - vector >= 0.12 && < 0.14
+      - yaml-sweep
+  yaml-sweep-lsp:
+    main: Main.hs
+    source-dirs: app/lsp
+    dependencies:
+      - lsp
+      - lsp-types
       - yaml-sweep

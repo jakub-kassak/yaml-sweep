@@ -1,7 +1,9 @@
 -- | Pass 1: IO & caching — load all YAML files recursively.
 module Yaml.Sweep.Loader
-  ( YamlCache,
+  ( DocSnapshot (..),
+    YamlCache,
     loadAndCache,
+    loadAndCacheSnapshots,
     findRefs,
     resolvePath,
     scalarText,
@@ -17,6 +19,7 @@ import Data.List (nubBy)
 import Data.Map.Strict qualified as Map
 import Data.String.Interpolate (i)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.YAML (Doc (..), Mapping, Node (..), Pos (..), Scalar (..), decodeNode)
 import Data.YAML.Event (tagToText)
 import System.Directory (doesFileExist)
@@ -27,20 +30,31 @@ import Yaml.Sweep.Types (Err, noPos)
 -- Cache types
 ------------------------------------------------------------------------------
 
-type YamlCache = Map FilePath (Node Pos)
+data DocSnapshot = DocSnapshot
+  { dsSource :: Text,
+    dsNode :: Node Pos
+  }
 
-data LoadStatus = InProgress | Done (Node Pos)
+type YamlCache = Map FilePath DocSnapshot
+
+data LoadStatus = InProgress | Done DocSnapshot
 
 type CacheState = Map.Map FilePath LoadStatus
 
-type LoadMonad = ExceptT Err (StateT CacheState IO)
+type FileReader = FilePath -> IO (Maybe Text)
+
+type LoadMonad = ReaderT FileReader (ExceptT Err (StateT CacheState IO))
 
 ------------------------------------------------------------------------------
 -- File loading
 ------------------------------------------------------------------------------
 
-loadAndCache :: FilePath -> IO (Either Err YamlCache)
-loadAndCache rootPath = evalStateT (runExceptT (processFile [] rootPath)) Map.empty
+loadAndCache :: (FilePath -> IO (Maybe Text)) -> FilePath -> IO (Either Err YamlCache)
+loadAndCache fileReader rootPath =
+  evalStateT (runExceptT (runReaderT (processFile [] rootPath) fileReader)) Map.empty
+
+loadAndCacheSnapshots :: FilePath -> IO (Either Err YamlCache)
+loadAndCacheSnapshots = loadAndCache (const (pure Nothing))
 
 processFile :: [StackFrame] -> FilePath -> LoadMonad YamlCache
 processFile stack path = do
@@ -58,9 +72,9 @@ processFile stack path = do
 loadNewFile :: [StackFrame] -> FilePath -> LoadMonad YamlCache
 loadNewFile stack path = do
   modify' (Map.insert path InProgress)
-  exists <- liftIO $ doesFileExist path
-  unless exists $ throwError (formatFileNotFoundError stack path)
-  content <- liftIO $ BL.fromStrict <$> readFileBS path
+  fileReader <- ask
+  source <- liftIO (fileReader path) >>= maybe (readDiskSource stack path) pure
+  let content = BL.fromStrict (TE.encodeUtf8 source)
   node <- case decodeNode content of
     Left (pos, err) -> throwError ([i|YAML parse error: #{err}|], pos, path)
     Right [] -> throwError ([i|empty YAML document|], noPos, path)
@@ -70,8 +84,20 @@ loadNewFile stack path = do
   subCaches <- forM refs $ \ref -> do
     let frame = StackFrame {sfFile = path, sfPos = refPos ref}
     processFile (frame : stack) (refPath ref)
-  modify' (Map.insert path (Done node))
-  pure $ Map.unions (Map.singleton path node : subCaches)
+  let dsSource = source
+      dsNode = node
+      snapshot = DocSnapshot {..}
+  modify' (Map.insert path (Done snapshot))
+  pure $ Map.unions (Map.singleton path snapshot : subCaches)
+
+readDiskSource :: [StackFrame] -> FilePath -> LoadMonad Text
+readDiskSource stack path = do
+  exists <- liftIO $ doesFileExist path
+  unless exists $ throwError (formatFileNotFoundError stack path)
+  bytes <- liftIO $ readFileBS path
+  case TE.decodeUtf8' bytes of
+    Left err -> throwError ([i|UTF-8 decode error: #{displayException err}|], noPos, path)
+    Right source -> pure source
 
 ------------------------------------------------------------------------------
 -- Reference finding
@@ -86,10 +112,17 @@ data ConfigRef = ConfigRef {refPath :: FilePath, refPos :: Pos}
 findRefs :: FilePath -> Node Pos -> [ConfigRef]
 findRefs baseDir = \case
   Scalar pos (SUnknown tag text)
-    | tagToText tag == Just "!include" -> [ConfigRef (resolvePath baseDir (T.unpack text)) pos]
+    | tagToText tag == Just "!include" ->
+        let refPath = resolvePath baseDir (T.unpack text)
+            refPos = pos
+         in [ConfigRef {..}]
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" ->
-        let basePaths = maybeToList ((\t -> ConfigRef (resolvePath baseDir (T.unpack t)) pos) <$> lookupScalar mapping "base")
+        let basePaths = maybeToList do
+              t <- lookupScalar mapping "base"
+              let refPath = resolvePath baseDir (T.unpack t)
+                  refPos = pos
+              pure ConfigRef {..}
             childRefs = concatMap (\(k, v) -> findRefs baseDir k <> findRefs baseDir v) (Map.toList mapping)
          in basePaths <> childRefs
   Mapping _ _ mapping ->

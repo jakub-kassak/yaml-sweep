@@ -53,7 +53,7 @@ runSuccess dir =
         & first (\(p, e) -> "Invalid result.yaml: " <> show e <> " at " <> show p)
         & liftEither
 
-    shouldMatchList (map void actuals) (map (void . docRoot) docs)
+    shouldMatchList (void <$> actuals) ((void . docRoot) <$> docs)
       & liftIO
     >>= either expectationFailure pure
 
@@ -78,7 +78,7 @@ collectTestDirs dir = do
     then pure []
     else do
       entries <- sort <$> listDirectory dir
-      let full = map (dir </>) entries
+      let full = (dir </>) <$> entries
       filterM doesDirectoryExist full
 
 -- | Walk @dir@ for test subdirectories and register each as an hspec example.
