@@ -1,0 +1,5 @@
+outer: !prod
+  - name: alpha
+    value: !prod [1, 2]
+  - name: beta
+    value: !prod [3, 4]

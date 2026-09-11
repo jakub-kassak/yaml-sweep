@@ -1,0 +1,29 @@
+left:
+  value: left-1
+right:
+  value: right-1
+---
+left:
+  value: left-1
+right:
+  value: right-2
+---
+left:
+  value: left-1
+right:
+  value: right-3
+---
+left:
+  value: left-2
+right:
+  value: right-1
+---
+left:
+  value: left-2
+right:
+  value: right-2
+---
+left:
+  value: left-2
+right:
+  value: right-3

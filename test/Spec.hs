@@ -1,5 +1,6 @@
 module Main (main) where
 
+import LoaderSpec qualified
 import LspSpec qualified
 import Runner (runTestCases)
 import System.Directory (getCurrentDirectory)
@@ -12,4 +13,5 @@ main = do
   let examplesDir = cwd </> "examples"
   hspec do
     runTestCases examplesDir
+    LoaderSpec.spec
     LspSpec.spec examplesDir

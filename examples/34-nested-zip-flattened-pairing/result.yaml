@@ -1,0 +1,14 @@
+left:
+  value: A
+right:
+  value: D
+---
+left:
+  value: B
+right:
+  value: E
+---
+left:
+  value: C
+right:
+  value: F

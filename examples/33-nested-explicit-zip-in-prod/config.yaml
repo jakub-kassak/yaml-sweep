@@ -1,0 +1,7 @@
+outer: !prod
+  - !key pair:
+    name: alpha
+    value: !zip_pair [a1, a2]
+  - !key pair:
+    name: beta
+    value: !zip_pair [b1, b2]

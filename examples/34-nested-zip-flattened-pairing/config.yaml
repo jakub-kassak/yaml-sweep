@@ -1,0 +1,6 @@
+left: !zip_pair
+  - value: !prod [A, B]
+  - value: !prod [C]
+right: !zip_pair
+  - value: !prod [D]
+  - value: !prod [E, F]

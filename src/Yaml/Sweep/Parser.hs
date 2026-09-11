@@ -40,7 +40,7 @@ nodeToExpr cache currentFile node = case node of
             ([i|!include file not in cache: #{path}|], pos, currentFile)
             (Map.lookup path cache)
         inner <- nodeToExpr cache path cachedSnapshot.dsNode
-        pure (CEFileBarrier pos currentFile inner)
+        pure (CEFileBarrier pos path inner)
   Scalar {} -> pure (CEScalar node)
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" -> do

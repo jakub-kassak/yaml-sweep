@@ -94,11 +94,11 @@ preScan env = \case
             Left ([I.i|double definition: '#{name}' was already declared at the same scope|], sePos entry, seFile entry)
       _ -> Right (scopeInsert name (newScopeEntry True pos env) env)
   CEObject _ fields -> foldlM preScan env (snd <$> M.elems fields)
-  CEZip pos name exprs ->
-    scopeInsertIfMissing name (newScopeEntry False pos env) env
-      & flip (foldlM preScan) exprs
-  CEProd _ exprs ->
-    foldlM preScan env exprs
+  CEZip pos name exprs -> do
+    traverse_ (preScan (emptyScopeEnv (path env))) exprs
+    pure (scopeInsertIfMissing name (newScopeEntry False pos env) env)
+  CEProd pos exprs ->
+    preScan env (CEZip pos (freshKey (path env) pos) exprs)
   where
     scopeInsertIfMissing name entry e =
       maybe (scopeInsert name entry e) (const e) (scopeLookup name e)
@@ -132,14 +132,17 @@ expand env = \case
       >>= foldM (merge pos) (Single (SVArray pos IM.empty))
         <&> Just
   CEZip pos key items ->
-    mapM (expand env) items
-      <&> catMaybes
-      >>= traverse (mergeSingle (zipErrMsg, pos, path env))
-        <&> (Just . Expand . M.singleton key)
+    traverse (expandZipAlternative env pos) items
+      <&> concat
+      <&> M.singleton key
+      <&> Expand
+      <&> Just
   CEProd pos items ->
     expand env (CEZip pos (freshKey (path env) pos) items)
-  CEFileBarrier pos fp inner ->
-    expand (emptyScopeEnv fp) inner >>= traverse (fmap Single . mergeSingle (fbErrMsg, pos, fp))
+  CEFileBarrier _ fp inner -> do
+    includedEnv <- preScan (emptyScopeEnv fp) inner
+    includedValue <- expand includedEnv inner
+    pure (namespaceScopes "__include_" fp <$> includedValue)
   CEInherit pos baseFile base override -> do
     -- The inherited base owns its scopes.  Namespace them before merging so
     -- an equally named child scope is independent rather than accidentally
@@ -156,17 +159,22 @@ expand env = \case
     env' = incScopeDepth env
     expandElem e = preScan env' e >>= flip expand e
 
-    mergeSingle _ (Single v) = Right v
-    mergeSingle err (Expand _) = Left err
-    fbErrMsg = "Top level keys in included file is not allowed"
-    zipErrMsg = "Zip over zip boundary is not supported"
-
     singletonObj pos k p v = SVObject pos (M.singleton k (p, v))
 
+expandZipAlternative :: ScopeEnv -> Pos -> ConfigExpr -> Either Err [SweepValue]
+expandZipAlternative env pos item = do
+  expanded <- expand (emptyScopeEnv (path env)) (CEArray pos [item])
+  case expanded of
+    Just (Single (SVArray _ values)) -> pure (IM.elems values)
+    _ -> Left ("zip alternative did not expand to an array", pos, path env)
+
 namespaceInheritedScopes :: FilePath -> SweepVariant a -> SweepVariant a
-namespaceInheritedScopes _ single@(Single _) = single
-namespaceInheritedScopes baseFile (Expand scopes) =
-  Expand (M.mapKeys (\scope -> "__inherit_" <> T.pack baseFile <> "::" <> scope) scopes)
+namespaceInheritedScopes = namespaceScopes "__inherit_"
+
+namespaceScopes :: Text -> FilePath -> SweepVariant a -> SweepVariant a
+namespaceScopes _ _ single@(Single _) = single
+namespaceScopes prefix file (Expand scopes) =
+  Expand (M.mapKeys (\scope -> prefix <> T.pack file <> "::" <> scope) scopes)
 
 merge :: Pos -> SweepVariant SweepValue -> SweepVariant SweepValue -> Either Err (SweepVariant SweepValue)
 merge _ (Single a1) (Single a2) = a1 `mergeDeep` a2 & Single & Right

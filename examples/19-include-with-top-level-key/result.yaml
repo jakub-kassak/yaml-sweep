@@ -1,0 +1,5 @@
+included:
+  val: 1
+---
+included:
+  val: 2

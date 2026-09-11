@@ -1,0 +1,15 @@
+outer:
+  name: alpha
+  value: a1
+---
+outer:
+  name: alpha
+  value: a2
+---
+outer:
+  name: beta
+  value: b1
+---
+outer:
+  name: beta
+  value: b2

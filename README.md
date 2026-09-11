@@ -122,16 +122,15 @@ top-level documents. Each array acts as a boundary — sweeps do not
 
 `!include` and `!inherit` both establish a *file boundary*: scopes
 declared in the outer file do not leak into the included/inherited
-file, and vice-versa. An included file may declare its own `!key` and
-`!zip` scopes that are fully resolved inside the include before
-splicing. An included file is **not** allowed to emit top-level sweep
-variants — its content must be a single value that gets spliced into
-the parent structure. An inherited base and its child may each contain
-sweeps. Their scopes remain isolated and their variants are combined
-after the deep merge. See
-  [examples/18-include-file-barrier](examples/18-include-file-barrier) (independent scope inside an
-  include), [examples/19-include-with-top-level-key](examples/19-include-with-top-level-key) (rejected: top
-  level keys in included file).
+file, and vice-versa. An included file may emit sweep variants; its
+unresolved scopes are forwarded with a file-specific namespace
+([`namespaceScopes`](src/Yaml/Sweep/Expander.hs)) so they remain
+independent of scopes in the parent and other included files. An
+inherited base and its child may each contain sweeps. Their scopes
+remain isolated and their variants are combined after the deep merge.
+See [examples/18-include-file-barrier](examples/18-include-file-barrier),
+[examples/19-include-with-top-level-key](examples/19-include-with-top-level-key),
+and [examples/35-include-namespaced-scopes](examples/35-include-namespaced-scopes).
 
 ## Quick start
 
@@ -190,7 +189,6 @@ the offending config and the expected message:
 | [09-key-different-lengths-error](examples/09-key-different-lengths-error) | `inconsistent lengths` for markers in the same named scope |
 | [10-key-shadowing-error](examples/10-key-shadowing-error) | `shadowing` — a `!key` redeclared inside its own subtree |
 | [11-double-key-definition](examples/11-double-key-definition) | `double definition` — `!key` declared twice in the same scope |
-| [19-include-with-top-level-key](examples/19-include-with-top-level-key) | `Top level keys in included file is not allowed` |
 | [22-prod-empty-list-error](examples/22-prod-empty-list-error) | `!prod with empty list` |
 | [23-zip-empty-scope-name-error](examples/23-zip-empty-scope-name-error) | `!zip_ with empty scope name` |
 | [24-zip-empty-list-error](examples/24-zip-empty-list-error) | `!zip_<name> with empty list` |
@@ -200,7 +198,6 @@ the offending config and the expected message:
 | [28-empty-yaml-document-error](examples/28-empty-yaml-document-error) | `empty YAML document` |
 | [29-include-file-not-found-error](examples/29-include-file-not-found-error) | `file not found` |
 | [30-include-cycle-error](examples/30-include-cycle-error) | `Cycle detected` |
-| [31-zip-over-zip-boundary-error](examples/31-zip-over-zip-boundary-error) | `Zip over zip boundary is not supported` |
 
 ## Language Server (`yaml-sweep-lsp`)
 
@@ -289,8 +286,13 @@ as the test corpus for the library.
 | [16-include](examples/16-include) | `!include` inlining files |
 | [17-inherit](examples/17-inherit) | `!inherit` with deep-merge overrides |
 | [18-include-file-barrier](examples/18-include-file-barrier) | File boundary isolates scope declarations |
+| [19-include-with-top-level-key](examples/19-include-with-top-level-key) | Include forwards top-level sweep variants |
 | [20-include-local-in-array](examples/20-include-local-in-array) | Include resolves its own local sweeps before splicing |
 | [21-include-plain-alongside-sweeps](examples/21-include-plain-alongside-sweeps) | Plain include spliced verbatim into each outer variant |
+| [31-nested-prod-in-prod](examples/31-nested-prod-in-prod) | Nested `!prod` alternatives |
+| [33-nested-explicit-zip-in-prod](examples/33-nested-explicit-zip-in-prod) | Explicit nested zip scopes in `!prod` alternatives |
+| [34-nested-zip-flattened-pairing](examples/34-nested-zip-flattened-pairing) | Flattened nested alternatives paired by outer zip index |
+| [35-include-namespaced-scopes](examples/35-include-namespaced-scopes) | Same-named include scopes remain independent |
 
 ## License
 
