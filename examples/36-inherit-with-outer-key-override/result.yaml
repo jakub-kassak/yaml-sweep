@@ -1,0 +1,15 @@
+items:
+  - model: custom_model1
+    name: override1
+    strategy: strat1
+  - model: custom_model1
+    name: override1
+    strategy: strat2
+---
+items:
+  - model: custom_model2
+    name: override2
+    strategy: strat1
+  - model: custom_model2
+    name: override2
+    strategy: strat2

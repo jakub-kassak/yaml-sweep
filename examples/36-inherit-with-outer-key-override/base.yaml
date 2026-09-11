@@ -1,0 +1,3 @@
+name: base_name
+model: base_model
+strategy: !prod [strat1, strat2]

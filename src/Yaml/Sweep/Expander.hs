@@ -194,7 +194,7 @@ expandLocalScopes _ s@(Single _) = [s]
 expandLocalScopes env (Expand m)
   | M.null notInEnv = [Expand m]
   | M.null inEnv = mergedLocals & map Single
-  | otherwise = mergedLocals & map (\sv -> fmap (`mergeDeep` sv) (Expand inEnv))
+  | otherwise = mergedLocals & map (\sv -> fmap (sv `mergeDeep`) (Expand inEnv))
   where
     (inEnv, notInEnv) = M.partitionWithKey (\k _ -> scopeMember k env) m
     mergedLocals = M.elems notInEnv & sequence & map (foldl1' mergeDeep)

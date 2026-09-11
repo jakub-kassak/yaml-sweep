@@ -1,6 +1,7 @@
 -- | Pass 1: IO & caching — load all YAML files recursively.
 module Yaml.Sweep.Loader
   ( DocSnapshot (..),
+    collapseParentSegments,
     YamlCache,
     loadAndCache,
     loadAndCacheSnapshots,
@@ -23,7 +24,7 @@ import Data.Text.Encoding qualified as TE
 import Data.YAML (Doc (..), Mapping, Node (..), Pos (..), Scalar (..), decodeNode)
 import Data.YAML.Event (tagToText)
 import System.Directory (doesFileExist)
-import System.FilePath (isAbsolute, takeDirectory, (</>))
+import System.FilePath (isAbsolute, joinPath, normalise, splitDirectories, takeDirectory, (</>))
 import Yaml.Sweep.Types (Err, noPos)
 
 ------------------------------------------------------------------------------
@@ -51,7 +52,7 @@ type LoadMonad = ReaderT FileReader (ExceptT Err (StateT CacheState IO))
 
 loadAndCache :: (FilePath -> IO (Maybe Text)) -> FilePath -> IO (Either Err YamlCache)
 loadAndCache fileReader rootPath =
-  evalStateT (runExceptT (runReaderT (processFile [] rootPath) fileReader)) Map.empty
+  evalStateT (runExceptT (runReaderT (processFile [] (collapseParentSegments rootPath)) fileReader)) Map.empty
 
 loadAndCacheSnapshots :: FilePath -> IO (Either Err YamlCache)
 loadAndCacheSnapshots = loadAndCache (const (pure Nothing))
@@ -182,5 +183,17 @@ lookupScalar m key = join (listToMaybe [scalarText v | (k, v) <- Map.toList m, s
 
 resolvePath :: FilePath -> FilePath -> FilePath
 resolvePath baseDir p
-  | isAbsolute p = p
-  | otherwise = baseDir </> p
+  | isAbsolute p = collapseParentSegments p
+  | otherwise = collapseParentSegments (baseDir </> p)
+
+collapseParentSegments :: FilePath -> FilePath
+collapseParentSegments path =
+  joinPath $ reverse $ foldl' collapse [] (splitDirectories (normalise path))
+  where
+    collapse parts ".." = case parts of
+      part : rest
+        | part /= ".." && not (isAbsolute path && null rest) -> rest
+      _
+        | isAbsolute path -> parts
+        | otherwise -> ".." : parts
+    collapse parts part = part : parts

@@ -1,0 +1,6 @@
+!key model:
+items:
+  - !inherit
+    base: base.yaml
+    name: !zip_model [override1, override2]
+    model: !zip_model [custom_model1, custom_model2]
