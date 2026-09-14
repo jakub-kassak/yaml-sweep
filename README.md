@@ -2,9 +2,9 @@
 
 A YAML configuration engine that turns a single YAML file into many
 configuration variants via *sweep expansion*. On top of plain YAML it
-supports four custom tags — `!prod`, `!key`/`!zip_<name>`, `!include`,
-and `!inherit` — that declaratively describe how a config should fan
-out into a list of concrete configurations.
+supports product and Zip sweeps, reusable variables, file inclusion, and
+inheritance, which declaratively describe how a config should fan out into
+a list of concrete configurations.
 
 Built entirely on [HsYAML](https://hackage.haskell.org/package/HsYAML).
 The public API returns `Data.YAML.Node Pos` values, so every mapping
@@ -78,6 +78,42 @@ are two kinds:
   [examples/06-zip-different-elems](examples/06-zip-different-elems) (same name, two independent local
   scopes of different lengths), [examples/08-nested-zip](examples/08-nested-zip) (a local scope
   spanning two nesting levels, bubbling to the nearest common array).
+
+### Variables
+
+Variables give a YAML value a reusable name. They replace a whole YAML
+value only; they cannot be used as a mapping key, merged into a mapping,
+or interpolated into a string.
+
+- **`!set <name>:`** defines a variable that is visible only in its
+  document.
+- **`!global_set <name>:`** defines a variable that is visible throughout
+  the loaded recipe, including included and inherited files.
+- **`!var_<name>`** replaces the complete YAML value at its location with
+  the named variable's value.
+
+  ```yaml
+  !set defaults:
+    retries: 3
+    timeout: 30
+
+  service:
+    settings: !var_defaults
+  ```
+
+A variable value is prepared once. Repeated `!var_<name>` references reuse
+that prepared value.
+
+Variables retain the usual sweep behavior. A Zip alternative in a variable
+stays synchronized with a matching visible Zip scope, while independent Zip
+scopes and `!prod` alternatives combine as a product. A cross-file Zip
+connection requires the matching `!global_key <name>:` declaration; local
+scopes remain isolated at file boundaries even when their names match.
+
+Local variables cannot be referenced across `!include` or `!inherit` file
+boundaries; global variables can. A local and global variable with the same
+name in one document is an error, as are duplicate global names, unknown
+references, and cycles between variables.
 
 ### Bubbling
 
@@ -198,6 +234,7 @@ the offending config and the expected message:
 | [28-empty-yaml-document-error](examples/28-empty-yaml-document-error) | `empty YAML document` |
 | [29-include-file-not-found-error](examples/29-include-file-not-found-error) | `file not found` |
 | [30-include-cycle-error](examples/30-include-cycle-error) | `Cycle detected` |
+| Variable declaration/reference | Duplicate or colliding declarations, unknown references, and variable cycles are errors at the relevant declaration or reference |
 
 ## Language Server (`yaml-sweep-lsp`)
 
