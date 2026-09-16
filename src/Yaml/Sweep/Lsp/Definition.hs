@@ -11,7 +11,7 @@ import Data.Text qualified as T
 import Data.YAML (Mapping, Node (..), Pos (..), Scalar (..))
 import Data.YAML.Event (tagToText)
 import System.FilePath (normalise, takeDirectory)
-import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, resolvePath, scalarText)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, resolvePath, scalarText, yamlDocuments)
 import Yaml.Sweep.Lsp.Types
 import Yaml.Sweep.Types
 
@@ -19,7 +19,7 @@ buildJumpMap :: YamlCache -> FilePath -> JumpMap
 buildJumpMap cache rootFile = rootJumps <> otherJumps
   where
     canonicalRoot = normalise rootFile
-    canonicalCache = Map.foldlWithKey' insertCanonical Map.empty cache
+    canonicalCache = Map.foldlWithKey' insertCanonical Map.empty cache.yamlDocuments
     insertCanonical acc file snapshot = Map.insert (normalise file) snapshot acc
     rootJumps = maybe Map.empty (buildDocument canonicalRoot) (Map.lookup canonicalRoot canonicalCache)
     otherJumps = Map.foldMapWithKey buildDocument (Map.delete canonicalRoot canonicalCache)
@@ -55,6 +55,7 @@ walkNode :: DocumentContext -> ScopeEnv -> Node Pos -> JumpMap
 walkNode context@DocumentContext {..} env = \case
   Scalar pos (SUnknown tag path)
     | tagToText tag == Just "!include" -> includeJump context pos path
+    | tagToText tag == Just "!load_str" -> includeJump context pos path
   Scalar {} -> Map.empty
   Mapping _ tag mapping
     | tagToText tag == Just "!inherit" ->

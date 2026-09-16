@@ -18,7 +18,7 @@ import Language.LSP.Protocol.Types qualified as LSP
 import System.Directory (doesFileExist)
 import System.FilePath (normalise)
 import Yaml.Sweep.Expander (resolveAndExpand)
-import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, loadAndCache)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, loadAndCache, yamlDocuments)
 import Yaml.Sweep.Lsp.Definition
 import Yaml.Sweep.Lsp.Inherit (findInheritHoverAt)
 import Yaml.Sweep.Lsp.Types
@@ -30,13 +30,13 @@ handleDefinition cache file pos =
   findDefinitionAt (buildJumpMap cache file) file pos >>= targetLocation
   where
     targetLocation JumpTarget {..} = do
-      DocSnapshot {..} <- lookupSnapshot cache jtTargetFile
       let locFile = jtTargetFile
           locSpan = jtTargetSpan
-      pure (locToLspLocation dsSource SrcLoc {..})
+          source = maybe "" (.dsSource) (lookupSnapshot cache jtTargetFile)
+      pure (locToLspLocation source SrcLoc {..})
 
 lookupSnapshot :: YamlCache -> FilePath -> Maybe DocSnapshot
-lookupSnapshot cache file = Map.foldrWithKey match Nothing cache
+lookupSnapshot cache file = Map.foldrWithKey match Nothing cache.yamlDocuments
   where
     canonicalFile = normalise file
     match cachedFile snapshot found

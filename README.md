@@ -125,7 +125,7 @@ top-level documents. Each array acts as a boundary — sweeps do not
   propagate further outward than their nearest enclosing array. See
   [examples/04-bubble-one-level-up](examples/04-bubble-one-level-up).
 
-### File inclusion and inheritance
+### File loading and inheritance
 
 - **`!include <file>`** — a scalar tag that inlines another YAML file
   at the tag position. File resolution is relative to the directory of
@@ -139,6 +139,15 @@ top-level documents. Each array acts as a boundary — sweeps do not
   See [examples/16-include](examples/16-include),
   [examples/20-include-local-in-array](examples/20-include-local-in-array),
   [examples/21-include-plain-alongside-sweeps](examples/21-include-plain-alongside-sweeps).
+
+- **`!load_str <file>`** — a scalar tag that reads a UTF-8 file as raw text
+  and emits that text as a YAML string. The path is resolved relative to the
+  YAML file containing the reference, so text that is not valid YAML can be
+  loaded without parsing.
+
+  ```yaml
+  system_prompt: !load_str prompts/system.txt
+  ```
 
 - **`!inherit`** — a mapping tag that loads a base file (named by the
   `base:` key) and deep-merges the remaining fields of the `!inherit`
@@ -205,8 +214,8 @@ the library API itself keeps them.
 `loadConfigValue` runs four passes:
 
 1. **Loader** (`Yaml.Sweep.Loader`) — recursively loads every file
-   reachable via `!include`/`!inherit`, with cycle detection, and
-   caches the parsed `Node Pos` tree of each.
+   reachable via `!include`/`!inherit`, with cycle detection, caches each
+   parsed `Node Pos` tree, and reads `!load_str` targets as UTF-8 text.
 2. **Parser** (`Yaml.Sweep.Parser`) — converts the HsYAML node tree
    into a `ConfigExpr` tree, recognising the custom tags and resolving
    `!inherit` via deep-merge.
@@ -232,7 +241,7 @@ the offending config and the expected message:
 | [26-inherit-no-base-error](examples/26-inherit-no-base-error) | `!inherit requires a 'base' key` |
 | [27-yaml-parse-error](examples/27-yaml-parse-error) | `YAML parse error` (from HsYAML) |
 | [28-empty-yaml-document-error](examples/28-empty-yaml-document-error) | `empty YAML document` |
-| [29-include-file-not-found-error](examples/29-include-file-not-found-error) | `file not found` |
+| [29-include-file-not-found-error](examples/29-include-file-not-found-error) | `file not found` for `!include` or `!load_str` targets |
 | [30-include-cycle-error](examples/30-include-cycle-error) | `Cycle detected` |
 | Variable declaration/reference | Duplicate or colliding declarations, unknown references, and variable cycles are errors at the relevant declaration or reference |
 
@@ -242,7 +251,7 @@ The bundled language server executable `yaml-sweep-lsp` communicates over stdio 
 
 ### Features
 
-- **Go to Definition**: Jump from `!zip_<name>` markers to their corresponding `!key <name>` declaration, from `!include <file>` paths to the referenced YAML file, and from `!inherit` `base: <file>` references to the base configuration file.
+- **Go to Definition**: Jump from `!zip_<name>` markers to their corresponding `!key <name>` declaration, from `!include <file>` and `!load_str <file>` paths to their referenced files, and from `!inherit` `base: <file>` references to the base configuration file.
 - **`!inherit` Hover**: Hover over `!inherit` or `base:` to see a structural summary of all overridden, added, and inherited fields across the full inheritance chain. Hover over an individual overridden or added key/value to view its provenance and previous values.
 - **Diagnostics**: Validates open, edited, and saved YAML documents using [`loadAndCache`](src/Yaml/Sweep/Loader.hs), reporting parse errors, missing files, circular includes, and scope inconsistencies directly in the editor.
 
