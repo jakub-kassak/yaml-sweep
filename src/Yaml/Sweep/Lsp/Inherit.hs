@@ -15,7 +15,7 @@ import Data.Text qualified as T
 import Data.YAML (Mapping, Node (..), Pos (..), Scalar (..))
 import Data.YAML.Event (tagToText)
 import System.FilePath (makeRelative, normalise, takeDirectory)
-import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, nodeAnn, resolvePath, scalarText, yamlDocuments)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, nodeAnn, resolvePath, scalarText)
 import Yaml.Sweep.Lsp.Definition (findTagSpanNear, scalarSpanAt)
 import Yaml.Sweep.Lsp.Types
 import Yaml.Sweep.Types (Path, PathStep (..))
@@ -436,7 +436,7 @@ isBaseReference source pos InheritDiff {..} = any contains spans
     contains = maybe False (`spanContainsPos` pos)
 
 lookupDocument :: YamlCache -> FilePath -> Maybe CachedDocument
-lookupDocument cache file = Map.foldrWithKey match Nothing cache.yamlDocuments
+lookupDocument cache file = Map.foldrWithKey match Nothing cache
   where
     canonicalFile = normalise file
     match cachedFile cdSnapshot found

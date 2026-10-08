@@ -28,7 +28,6 @@ data ConfigExpr
   | CEProd Pos [ConfigExpr]
   | CEZip Pos Text [ConfigExpr]
   | CEKeyDecl Text Pos
-  | CELoadStr Pos FilePath Text
   | CEFileBarrier Pos FilePath ConfigExpr
   -- | An inherited base is expanded in its own scope and then deep-merged
   -- with the child expression.  Unlike an include, the child may contain a

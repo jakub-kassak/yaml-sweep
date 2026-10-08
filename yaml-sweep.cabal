@@ -109,9 +109,6 @@ extra-doc-files:
     examples/35-include-namespaced-scopes/left.yaml
     examples/35-include-namespaced-scopes/result.yaml
     examples/35-include-namespaced-scopes/right.yaml
-    examples/36-inherit-with-outer-key-override/base.yaml
-    examples/36-inherit-with-outer-key-override/config.yaml
-    examples/36-inherit-with-outer-key-override/result.yaml
 
 source-repository head
   type: git
