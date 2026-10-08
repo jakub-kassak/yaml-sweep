@@ -10,7 +10,7 @@ import Data.List (foldl1')
 import Data.Map.Strict qualified as M
 import Data.String.Interpolate qualified as I
 import Data.Text qualified as T
-import Data.YAML (Node (..), Pos (..), Scalar (..))
+import Data.YAML (Node (..), Pos (..))
 import Data.YAML.Event (Tag, mkTag)
 import Yaml.Sweep.Types
   ( ConfigExpr (..),
@@ -82,7 +82,6 @@ mergeDeep _ v2 = v2
 preScan :: ScopeEnv -> ConfigExpr -> Either Err ScopeEnv
 preScan env = \case
   CEScalar _ -> Right env
-  CELoadStr {} -> Right env
   CEFileBarrier _ _ _ -> Right env
   CEInherit _ _ _ override -> preScan env override
   CEArray _ _ -> Right env
@@ -117,7 +116,6 @@ newScopeEntry seIsExplicit sePos ScopeEnv {..} = ScopeEntry {..}
 expand :: ScopeEnv -> ConfigExpr -> Either Err (Maybe (SweepVariant SweepValue))
 expand env = \case
   CEScalar node -> node & SVScalar & Single & Just & Right
-  CELoadStr pos _ contents -> Scalar pos (SStr contents) & SVScalar & Single & Just & Right
   CEKeyDecl {} -> Right Nothing
   CEObject pos keyedFields ->
     traverse (traverse (expand env)) keyedFields
