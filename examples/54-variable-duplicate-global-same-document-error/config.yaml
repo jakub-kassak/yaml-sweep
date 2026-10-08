@@ -1,0 +1,3 @@
+!global_set same: first
+!global_set same: second
+value: !var_same

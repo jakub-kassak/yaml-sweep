@@ -1,0 +1,5 @@
+!global_key pair:
+outer: !zip_pair [left, right]
+items:
+  - !key pair:
+    inner: !zip_pair [one, two, three]

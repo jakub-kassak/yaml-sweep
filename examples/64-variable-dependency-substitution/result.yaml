@@ -1,0 +1,7 @@
+outer: left
+value:
+  nested: one
+---
+outer: right
+value:
+  nested: two

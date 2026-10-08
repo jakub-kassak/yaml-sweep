@@ -1,0 +1,7 @@
+!set shared: !prod [one, two]
+!set independent: !prod [red, blue]
+left:
+  value: !var_shared
+right:
+  value: !var_shared
+tone: !var_independent

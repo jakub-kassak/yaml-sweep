@@ -1,0 +1,4 @@
+!set selected:
+  first: !zip_pair [one, two]
+  second: !zip_pair [red, blue]
+value: !var_selected

@@ -6,9 +6,10 @@ import Language.LSP.Protocol.Message qualified as LSP
 import Language.LSP.Protocol.Types qualified as LSP
 import Language.LSP.Server qualified as LSP
 import Language.LSP.VFS qualified as VFS
-import Yaml.Sweep.Loader (DocSnapshot (..), loadAndCache)
+import Yaml.Sweep.Loader (DocSnapshot (..), loadReferencedYamlDocumentsWith)
 import Yaml.Sweep.Lsp.Handler (handleDefinition, handleHover, lookupSnapshot, removeDiagnosticRoot, updateDiagnosticRoot, validateDocument)
 import Yaml.Sweep.Lsp.Types (lspPositionToPos)
+import Yaml.Sweep.Source (SourceReader, overlaySourceReader, readYamlFile)
 import Prelude hiding (modifyMVar, newMVar)
 
 data ServerState = ServerState
@@ -45,11 +46,11 @@ definitionHandler msg responder = do
   result <- withVfsOverlay (\fileReader -> definitionAt fileReader uri position)
   responder (Right result)
 
-definitionAt :: (FilePath -> IO (Maybe Text)) -> LSP.Uri -> LSP.Position -> IO (LSP.MessageResult LSP.Method_TextDocumentDefinition)
-definitionAt fileReader uri position = case LSP.uriToFilePath uri of
+definitionAt :: SourceReader -> LSP.Uri -> LSP.Position -> IO (LSP.MessageResult LSP.Method_TextDocumentDefinition)
+definitionAt sourceReader uri position = case LSP.uriToFilePath uri of
   Nothing -> pure noDefinition
   Just file ->
-    loadAndCache fileReader file <&> \case
+    loadReferencedYamlDocumentsWith sourceReader file <&> \case
       Left _ -> noDefinition
       Right cache -> case lookupSnapshot cache file of
         Nothing -> noDefinition
@@ -70,11 +71,11 @@ hoverHandler msg responder = do
   result <- withVfsOverlay (\fileReader -> hoverAt fileReader uri position)
   responder (Right result)
 
-hoverAt :: (FilePath -> IO (Maybe Text)) -> LSP.Uri -> LSP.Position -> IO (LSP.MessageResult LSP.Method_TextDocumentHover)
-hoverAt fileReader uri position = case LSP.uriToFilePath uri of
+hoverAt :: SourceReader -> LSP.Uri -> LSP.Position -> IO (LSP.MessageResult LSP.Method_TextDocumentHover)
+hoverAt sourceReader uri position = case LSP.uriToFilePath uri of
   Nothing -> pure noHover
   Just file ->
-    loadAndCache fileReader file <&> \case
+    loadReferencedYamlDocumentsWith sourceReader file <&> \case
       Left _ -> noHover
       Right cache -> case lookupSnapshot cache file of
         Nothing -> noHover
@@ -115,10 +116,10 @@ validateUri uri = for_ (LSP.uriToFilePath uri) \file -> do
   for_ toPublish \(target, diags) ->
     publishDiagnostics (LSP.fromNormalizedUri target) diags
 
-withVfsOverlay :: ((FilePath -> IO (Maybe Text)) -> IO a) -> LSP.LspM ServerState a
+withVfsOverlay :: (SourceReader -> IO a) -> LSP.LspM ServerState a
 withVfsOverlay action = do
   env <- LSP.getLspEnv
-  liftIO (action (readVirtualFile env))
+  liftIO (action (overlaySourceReader (readVirtualFile env) readYamlFile))
 
 readVirtualFile :: LSP.LanguageContextEnv ServerState -> FilePath -> IO (Maybe Text)
 readVirtualFile env file =

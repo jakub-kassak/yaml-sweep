@@ -1,0 +1,3 @@
+!set same: local
+!global_set same: global
+value: !var_same

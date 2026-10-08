@@ -1,0 +1,4 @@
+scalar: hello
+mapping:
+  nested: value
+array: [one, two]

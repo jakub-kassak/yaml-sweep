@@ -1,0 +1,3 @@
+group:
+  !global_key pair:
+value: !zip_pair [one, two]

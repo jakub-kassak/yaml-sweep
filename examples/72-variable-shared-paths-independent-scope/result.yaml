@@ -1,0 +1,23 @@
+left:
+  value: one
+right:
+  value: one
+tone: red
+---
+left:
+  value: one
+right:
+  value: one
+tone: blue
+---
+left:
+  value: two
+right:
+  value: two
+tone: red
+---
+left:
+  value: two
+right:
+  value: two
+tone: blue

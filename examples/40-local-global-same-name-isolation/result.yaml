@@ -1,0 +1,11 @@
+outer: left
+items:
+  - inner: one
+  - inner: two
+  - inner: three
+---
+outer: right
+items:
+  - inner: one
+  - inner: two
+  - inner: three

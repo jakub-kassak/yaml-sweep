@@ -112,6 +112,22 @@ extra-doc-files:
     examples/36-inherit-with-outer-key-override/base.yaml
     examples/36-inherit-with-outer-key-override/config.yaml
     examples/36-inherit-with-outer-key-override/result.yaml
+    examples/37-global-include-sync/config.yaml
+    examples/37-global-include-sync/include.yaml
+    examples/37-global-include-sync/result.yaml
+    examples/38-global-inherit-sync/base.yaml
+    examples/38-global-inherit-sync/config.yaml
+    examples/38-global-inherit-sync/result.yaml
+    examples/39-global-unequal-lengths-error/config.yaml
+    examples/39-global-unequal-lengths-error/error.txt
+    examples/39-global-unequal-lengths-error/include.yaml
+    examples/40-local-global-same-name-isolation/config.yaml
+    examples/40-local-global-same-name-isolation/result.yaml
+    examples/41-global-key-non-root-error/config.yaml
+    examples/41-global-key-non-root-error/error.txt
+    examples/42-implicit-global-same-name-isolation/config.yaml
+    examples/42-implicit-global-same-name-isolation/include.yaml
+    examples/42-implicit-global-same-name-isolation/result.yaml
 
 source-repository head
   type: git
@@ -127,6 +143,7 @@ library
       Yaml.Sweep
       Yaml.Sweep.Types
       Yaml.Sweep.Loader
+      Yaml.Sweep.Source
       Yaml.Sweep.Parser
       Yaml.Sweep.Expander
       Yaml.Sweep.Lsp.Types

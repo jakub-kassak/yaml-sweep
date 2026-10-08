@@ -1,0 +1,5 @@
+!key pair:
+!set item: !zip_pair [one, two]
+left: !zip_pair [left-one, left-two]
+first: !var_item
+second: !var_item

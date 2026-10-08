@@ -3,6 +3,9 @@ module Yaml.Sweep.Types
   ( ConfigExpr (..),
     PathStep (..),
     Path,
+    ScopeIdentity (..),
+    LocalScopeId (..),
+    VariableIdentity (..),
     ScopeEnv (..),
     ScopeEntry (..),
     Err,
@@ -10,10 +13,16 @@ module Yaml.Sweep.Types
     note,
     renderErr,
     emptyScopeEnv,
+    emptyLocalScopeEnv,
+    explicitLocalScopeEnv,
     incScopeDepth,
     scopeLookup,
+    scopeLookupLocal,
+    scopeLookupGlobal,
     scopeInsert,
+    scopeInsertGlobal,
     scopeMember,
+    scopeName,
   )
 where
 
@@ -25,15 +34,17 @@ data ConfigExpr
   = CEScalar (Node Pos)
   | CEObject Pos (Map (Node ()) (Pos, ConfigExpr))
   | CEArray Pos [ConfigExpr]
-  | CEProd Pos [ConfigExpr]
   | CEZip Pos Text [ConfigExpr]
   | CEKeyDecl Text Pos
-  | CELoadStr Pos FilePath Text
+  | CEGlobalKeyDecl Text Pos
+  | CEVarDecl Bool Text Pos ConfigExpr
+  | CEVarRef Text Pos
+  | CEOrigin FilePath ConfigExpr
   | CEFileBarrier Pos FilePath ConfigExpr
-  -- | An inherited base is expanded in its own scope and then deep-merged
-  -- with the child expression.  Unlike an include, the child may contain a
-  -- top-level sweep after inheritance.
-  | CEInherit Pos FilePath ConfigExpr ConfigExpr
+  | -- | An inherited base is expanded in its own scope and then deep-merged
+    -- with the child expression.  Unlike an include, the child may contain a
+    -- top-level sweep after inheritance.
+    CEInherit Pos FilePath ConfigExpr ConfigExpr
   deriving (Show, Eq)
 
 ------------------------------------------------------------------------------
@@ -54,15 +65,34 @@ type Path = [PathStep]
 -- their declarations; 'depth' is the current nesting level (used for
 -- shadowing checks); 'path' is the file in which the current subtree
 -- originates, used for error reporting.
+data ScopeIdentity
+  = LocalScope LocalScopeId
+  | GlobalScope Text
+  deriving (Show, Eq, Ord)
+
+data LocalScopeId
+  = LexicalScope Text
+  | DocumentScope FilePath Text
+  | IncludedScope FilePath LocalScopeId
+  | InheritedScope FilePath LocalScopeId
+  deriving (Show, Eq, Ord)
+
+data VariableIdentity
+  = LocalVariable FilePath Text
+  | GlobalVariable Text
+  deriving (Show, Eq, Ord)
+
 data ScopeEnv = ScopeEnv
-  { bindings :: Map Text ScopeEntry,
+  { localBindings :: Map Text ScopeEntry,
+    globalBindings :: Map Text ScopeEntry,
     depth :: Int,
     path :: FilePath
   }
   deriving (Show, Eq)
 
 data ScopeEntry = ScopeEntry
-  { seIsExplicit :: Bool,
+  { seIdentity :: ScopeIdentity,
+    seIsExplicit :: Bool,
     sePos :: Pos,
     seFile :: FilePath,
     seDepth :: Int
@@ -96,18 +126,45 @@ renderErr (msg, pos, file) =
 emptyScopeEnv :: FilePath -> ScopeEnv
 emptyScopeEnv path = ScopeEnv {..}
   where
-    bindings = Map.empty
+    localBindings = Map.empty
+    globalBindings = Map.empty
     depth = 0
+
+emptyLocalScopeEnv :: ScopeEnv -> ScopeEnv
+emptyLocalScopeEnv ScopeEnv {..} = ScopeEnv {localBindings = Map.empty, ..}
+
+explicitLocalScopeEnv :: ScopeEnv -> ScopeEnv
+explicitLocalScopeEnv env@ScopeEnv {..} = env {localBindings = Map.filter seIsExplicit localBindings}
 
 -- | Increment the nesting depth by one (bindings and path preserved).
 incScopeDepth :: ScopeEnv -> ScopeEnv
 incScopeDepth env = env {depth = depth env + 1}
 
 scopeLookup :: Text -> ScopeEnv -> Maybe ScopeEntry
-scopeLookup name env = Map.lookup name (bindings env)
+scopeLookup name ScopeEnv {..} = Map.lookup name localBindings <|> Map.lookup name globalBindings
+
+scopeLookupLocal :: Text -> ScopeEnv -> Maybe ScopeEntry
+scopeLookupLocal name ScopeEnv {..} = Map.lookup name localBindings
+
+scopeLookupGlobal :: Text -> ScopeEnv -> Maybe ScopeEntry
+scopeLookupGlobal name ScopeEnv {..} = Map.lookup name globalBindings
 
 scopeInsert :: Text -> ScopeEntry -> ScopeEnv -> ScopeEnv
-scopeInsert name entry env = env {bindings = Map.insert name entry (bindings env)}
+scopeInsert name entry env@ScopeEnv {..} = env {localBindings = Map.insert name entry localBindings}
 
-scopeMember :: Text -> ScopeEnv -> Bool
-scopeMember name env = Map.member name (bindings env)
+scopeInsertGlobal :: Text -> ScopeEntry -> ScopeEnv -> ScopeEnv
+scopeInsertGlobal name entry env@ScopeEnv {..} = env {globalBindings = Map.insert name entry globalBindings}
+
+scopeMember :: ScopeIdentity -> ScopeEnv -> Bool
+scopeMember scopeIdentity ScopeEnv {..} = case scopeIdentity of
+  GlobalScope {} -> True
+  LocalScope {} -> any ((== scopeIdentity) . seIdentity) localBindings
+
+scopeName :: ScopeIdentity -> Text
+scopeName = \case
+  GlobalScope name -> name
+  LocalScope localScope -> case localScope of
+    LexicalScope name -> name
+    DocumentScope _ name -> name
+    IncludedScope _ inner -> scopeName (LocalScope inner)
+    InheritedScope _ inner -> scopeName (LocalScope inner)

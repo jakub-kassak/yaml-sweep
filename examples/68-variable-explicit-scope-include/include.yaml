@@ -1,0 +1,4 @@
+!key pair:
+!set selected: !zip_pair [one, two]
+value: !var_selected
+outer: !zip_pair [left, right]

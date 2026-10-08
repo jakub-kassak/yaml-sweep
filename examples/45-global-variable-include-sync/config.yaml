@@ -1,0 +1,4 @@
+!global_key pair:
+!global_set picked: !zip_pair [one, two]
+outer: !zip_pair [left, right]
+included: !include include.yaml

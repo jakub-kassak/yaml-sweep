@@ -1,0 +1,2 @@
+!global_key pair:
+inner: !zip_pair [one, two, three]

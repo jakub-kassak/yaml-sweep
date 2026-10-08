@@ -1,0 +1,5 @@
+!set values: !prod [one, two]
+items:
+  - before
+  - !var_values
+  - after

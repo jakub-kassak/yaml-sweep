@@ -1,0 +1,3 @@
+!set first: !var_second
+!set second: !var_first
+value: present

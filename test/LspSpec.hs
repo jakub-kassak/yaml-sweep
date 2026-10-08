@@ -9,11 +9,12 @@ import Language.LSP.Protocol.Types qualified as LSP
 import System.FilePath (normalise, takeDirectory, (</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
-import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, loadAndCache, loadAndCacheSnapshots, rawTexts, yamlDocuments)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, loadReferencedYamlDocuments, loadReferencedYamlDocumentsWith)
 import Yaml.Sweep.Lsp.Definition (buildJumpMap, findDefinitionAt)
 import Yaml.Sweep.Lsp.Handler (handleDefinition, handleHover, removeDiagnosticRoot, updateDiagnosticRoot, validateDocument)
 import Yaml.Sweep.Lsp.Inherit (buildInheritDiffs, findInheritHoverAt, formatInheritHover)
 import Yaml.Sweep.Lsp.Types
+import Yaml.Sweep.Source (overlaySourceReader, readYamlFile)
 import Yaml.Sweep.Types (PathStep (..), renderErr)
 
 data DefinitionCase = DefinitionCase
@@ -62,6 +63,26 @@ spec examplesDir = describe "LSP features" do
     it "does not carry scopes across inherit boundaries" $
       withFixture inheritBoundaryFiles "config.yaml" \configFile cache ->
         findDefinitionAt (buildJumpMap cache configFile) configFile (at 3 9) `shouldBe` Nothing
+    it "jumps from a global zip to its same-document declaration" $
+      withFixture globalScopeFiles "config.yaml" \configFile cache -> do
+        let target = jumpTarget configFile (singleLineSpan 1 12 16)
+        findDefinitionAt (buildJumpMap cache configFile) configFile (at 2 7) `shouldBe` Just target
+  describe "variables" do
+    it "jumps from a same-document local variable reference to its declaration" $
+      withFixture localVariableFiles "config.yaml" \configFile cache -> do
+        let jumpMap = buildJumpMap cache configFile
+            sourceSpan = singleLineSpan 2 7 19
+            target = jumpTarget configFile (singleLineSpan 1 5 12)
+        Map.lookup (normalise configFile, sourceSpan) jumpMap `shouldBe` Just target
+        findDefinitionAt jumpMap configFile (at 2 7) `shouldBe` Just target
+    it "jumps from an included document to a recipe-global variable declaration" $
+      withFixture globalVariableFiles "config.yaml" \configFile cache -> do
+        let childFile = takeDirectory configFile </> "child.yaml"
+            jumpMap = buildJumpMap cache configFile
+            sourceSpan = singleLineSpan 1 7 18
+            target = jumpTarget configFile (singleLineSpan 1 12 18)
+        Map.lookup (normalise childFile, sourceSpan) jumpMap `shouldBe` Just target
+        findDefinitionAt jumpMap childFile (at 1 7) `shouldBe` Just target
   describe "source spans" do
     it "uses exact spans for spaced and block-style tags and quoted paths" $
       withFixture exactSpanFiles "config.yaml" \configFile cache -> do
@@ -91,23 +112,15 @@ spec examplesDir = describe "LSP features" do
       lspPositionToPos source (lspPosition 0 3) `shouldBe` at 1 2
     it "retains source text in each cache snapshot" $
       withFixture exactSpanFiles "config.yaml" \configFile cache ->
-        (Map.lookup configFile cache.yamlDocuments <&> (.dsSource)) `shouldBe` Just exactSpanSource
+        (Map.lookup configFile cache <&> (.dsSource)) `shouldBe` Just exactSpanSource
     it "loads editor buffers instead of stale disk content" $
       withFixture [fixtureFile "config.yaml" "disk: stale\n"] "config.yaml" \configFile _ -> do
         let liveSource = "editor: live\n"
             fileReader file
               | normalise file == normalise configFile = pure (Just liveSource)
               | otherwise = pure Nothing
-        loadAndCache fileReader configFile
-          >>= either (expectationFailure . renderErr) (\cache -> (Map.lookup configFile cache.yamlDocuments <&> (.dsSource)) `shouldBe` Just liveSource)
-    it "jumps from load_str paths to uncached raw files" $
-      withFixture loadStrFiles "config.yaml" \configFile cache -> do
-        let rawFile = takeDirectory configFile </> "prompt.txt"
-            expected = jumpTarget rawFile fileStartSpan
-        Map.member rawFile cache.yamlDocuments `shouldBe` False
-        Map.lookup rawFile cache.rawTexts `shouldBe` Just "not: [yaml"
-        findDefinitionAt (buildJumpMap cache configFile) configFile (at 1 18) `shouldBe` Just expected
-        handleDefinition cache configFile (at 1 18) `shouldBe` targetLocation cache expected
+        loadReferencedYamlDocumentsWith (overlaySourceReader fileReader readYamlFile) configFile
+          >>= either (expectationFailure . renderErr) (\cache -> (Map.lookup configFile cache <&> (.dsSource)) `shouldBe` Just liveSource)
   describe "diagnostics" do
     it "validates parsing and sweep expansion against editor buffers" $
       withFixture [fixtureFile "config.yaml" "value: disk\n"] "config.yaml" \configFile _ -> do
@@ -117,8 +130,8 @@ spec examplesDir = describe "LSP features" do
             validReader file
               | normalise file == normalise configFile = pure (Just "value: !prod [one]\n")
               | otherwise = pure Nothing
-        invalidDiagnostics <- validateDocument invalidReader configFile
-        validDiagnostics <- validateDocument validReader configFile
+        invalidDiagnostics <- validateDocument (overlaySourceReader invalidReader readYamlFile) configFile
+        validDiagnostics <- validateDocument (overlaySourceReader validReader readYamlFile) configFile
         case Map.lookup configFile invalidDiagnostics of
           Just [diagnostic] -> do
             diagnostic._message `shouldBe` "!prod with empty list"
@@ -207,7 +220,7 @@ spec examplesDir = describe "LSP features" do
 
 withCache :: FilePath -> (YamlCache -> Expectation) -> Expectation
 withCache file assertion =
-  loadAndCacheSnapshots file >>= either (expectationFailure . renderErr) assertion
+  loadReferencedYamlDocuments file >>= either (expectationFailure . renderErr) assertion
 
 withSingleInheritDiff :: YamlCache -> FilePath -> (InheritDiff -> Expectation) -> Expectation
 withSingleInheritDiff cache file assertion = case buildInheritDiffs cache file of
@@ -221,11 +234,11 @@ targetFor examplesDir DefinitionCase {..} = JumpTarget {..}
     jtTargetSpan = singleLineSpan dcTargetLine dcTargetCol dcTargetEndCol
 
 targetLocation :: YamlCache -> JumpTarget -> Maybe Location
-targetLocation cache JumpTarget {..} = Just (locToLspLocation dsSource SrcLoc {..})
-  where
-    dsSource = maybe "" (.dsSource) (Map.lookup jtTargetFile cache.yamlDocuments)
-    locFile = jtTargetFile
-    locSpan = jtTargetSpan
+targetLocation cache JumpTarget {..} = do
+  DocSnapshot {..} <- Map.lookup jtTargetFile cache
+  let locFile = jtTargetFile
+      locSpan = jtTargetSpan
+  pure (locToLspLocation dsSource SrcLoc {..})
 
 at :: Int -> Int -> Pos
 at posLine posColumn = Pos {..}
@@ -304,6 +317,20 @@ inheritBoundaryFiles =
     fixtureFile "base.yaml" "!key a:\nvalue: !zip_a [1, 2]\n"
   ]
 
+globalScopeFiles :: [FixtureFile]
+globalScopeFiles =
+  [fixtureFile "config.yaml" "!global_key pair:\nvalue: !zip_pair [one, two]\n"]
+
+localVariableFiles :: [FixtureFile]
+localVariableFiles =
+  [fixtureFile "config.yaml" "!set message: hello\nvalue: !var_message\n"]
+
+globalVariableFiles :: [FixtureFile]
+globalVariableFiles =
+  [ fixtureFile "config.yaml" "!global_set shared: value\nchild: !include child.yaml\n",
+    fixtureFile "child.yaml" "value: !var_shared\n"
+  ]
+
 addedInheritFiles :: [FixtureFile]
 addedInheritFiles =
   [ fixtureFile "config.yaml" "derived: !inherit\n  base: base.yaml\n  max_rounds: 8\n  new_field: true\n",
@@ -327,12 +354,6 @@ backtickInheritFiles :: [FixtureFile]
 backtickInheritFiles =
   [ fixtureFile "config.yaml" "derived: !inherit\n  base: base.yaml\n  message: \"new `value\"\n",
     fixtureFile "base.yaml" "message: \"old `value\"\n"
-  ]
-
-loadStrFiles :: [FixtureFile]
-loadStrFiles =
-  [ fixtureFile "config.yaml" "prompt: !load_str prompt.txt\n",
-    fixtureFile "prompt.txt" "not: [yaml"
   ]
 
 exactSpanFiles :: [FixtureFile]

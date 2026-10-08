@@ -1,0 +1,27 @@
+left:
+  value:
+    item: one
+right:
+  value:
+    item: one
+---
+left:
+  value:
+    item: one
+right:
+  value:
+    item: two
+---
+left:
+  value:
+    item: two
+right:
+  value:
+    item: one
+---
+left:
+  value:
+    item: two
+right:
+  value:
+    item: two

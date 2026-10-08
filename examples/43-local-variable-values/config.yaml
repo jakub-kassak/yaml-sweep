@@ -1,0 +1,7 @@
+!set scalar: hello
+!set mapping:
+  nested: value
+!set array: [one, two]
+scalar: !var_scalar
+mapping: !var_mapping
+array: !var_array

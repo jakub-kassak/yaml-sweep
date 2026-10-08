@@ -1,0 +1,4 @@
+!key pair:
+!set values: !zip_pair [one, two, three]
+left: !var_values
+right: !zip_pair [red, blue, green]

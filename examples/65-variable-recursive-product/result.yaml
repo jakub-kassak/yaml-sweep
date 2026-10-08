@@ -1,0 +1,15 @@
+items:
+  first: one
+tone: red
+---
+items:
+  first: one
+tone: blue
+---
+items:
+  second: two
+tone: red
+---
+items:
+  second: two
+tone: blue

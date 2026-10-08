@@ -1,0 +1,2 @@
+included: !include include.yaml
+root: !var_from_child

@@ -1,0 +1,4 @@
+!set selected:
+  first: !prod [one, two]
+  second: !prod [red, blue]
+value: !var_selected

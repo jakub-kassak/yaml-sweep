@@ -1,0 +1,6 @@
+!key pair:
+!set B: !zip_pair [one, two]
+!set A:
+  nested: !var_B
+outer: !zip_pair [left, right]
+value: !var_A

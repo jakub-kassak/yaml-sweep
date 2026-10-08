@@ -1,0 +1,23 @@
+outer: left
+included:
+  inner: one
+---
+outer: left
+included:
+  inner: two
+---
+outer: left
+included:
+  inner: three
+---
+outer: right
+included:
+  inner: one
+---
+outer: right
+included:
+  inner: two
+---
+outer: right
+included:
+  inner: three

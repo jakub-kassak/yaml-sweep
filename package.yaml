@@ -73,6 +73,7 @@ library:
     - Yaml.Sweep
     - Yaml.Sweep.Types
     - Yaml.Sweep.Loader
+    - Yaml.Sweep.Source
     - Yaml.Sweep.Parser
     - Yaml.Sweep.Expander
     - Yaml.Sweep.Lsp.Types

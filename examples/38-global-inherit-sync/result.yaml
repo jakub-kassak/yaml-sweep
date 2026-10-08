@@ -1,0 +1,7 @@
+outer: left
+derived:
+  inner: one
+---
+outer: right
+derived:
+  inner: two

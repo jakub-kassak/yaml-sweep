@@ -1,0 +1,2 @@
+!set local: root
+included: !include include.yaml

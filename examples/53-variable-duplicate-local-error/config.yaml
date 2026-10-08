@@ -1,0 +1,3 @@
+!set same: first
+!set same: second
+value: !var_same

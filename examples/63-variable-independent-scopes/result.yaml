@@ -1,0 +1,19 @@
+value:
+  nested:
+    first: one
+    second: red
+---
+value:
+  nested:
+    first: one
+    second: blue
+---
+value:
+  nested:
+    first: two
+    second: red
+---
+value:
+  nested:
+    first: two
+    second: blue

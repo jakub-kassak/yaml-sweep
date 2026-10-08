@@ -1,0 +1,17 @@
+outer: left
+selected: one
+---
+outer: left
+selected: two
+---
+outer: middle
+selected: one
+---
+outer: middle
+selected: two
+---
+outer: right
+selected: one
+---
+outer: right
+selected: two

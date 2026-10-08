@@ -5,11 +5,12 @@ module Yaml.Sweep.Parser
   )
 where
 
-import Data.Map.Strict qualified as Map
+import Control.Monad (foldM)
+import Data.Map.Strict qualified as M
 import Data.String.Interpolate (i)
 import Data.Text qualified as T
 import Data.YAML (Mapping, Node (..), Pos (..), Scalar (..))
-import Data.YAML.Event (tagToText)
+import Data.YAML.Event (mkTag, tagToText)
 import System.FilePath (takeDirectory)
 import Yaml.Sweep.Loader
   ( DocSnapshot (..),
@@ -17,9 +18,7 @@ import Yaml.Sweep.Loader
     lookupScalar,
     nodeAnn,
     resolvePath,
-    rawTexts,
     scalarText,
-    yamlDocuments,
   )
 import Yaml.Sweep.Types
   ( ConfigExpr (..),
@@ -32,71 +31,113 @@ import Yaml.Sweep.Types
 -- drop the @!key@ decoration while keeping a structural key for
 -- 'Map (Node ()) ...' lookups.
 nodeToExpr :: YamlCache -> FilePath -> Node Pos -> Either Err ConfigExpr
-nodeToExpr cache currentFile node = case node of
+nodeToExpr cache currentFile node = CEOrigin currentFile <$> nodeToExprAtRoot True cache currentFile node
+
+nodeToExprAtRoot :: Bool -> YamlCache -> FilePath -> Node Pos -> Either Err ConfigExpr
+nodeToExprAtRoot isDocumentRoot cache currentFile node = case node of
   Scalar pos (SUnknown tag text)
     | tagToText tag == Just "!include" -> do
         let baseDir = takeDirectory currentFile
             path = resolvePath baseDir (T.unpack text)
-        cachedSnapshot <-
-          note
-            ([i|!include file not in cache: #{path}|], pos, currentFile)
-            (Map.lookup path cache.yamlDocuments)
+        cachedSnapshot <- cache M.!? path & note ([i|!include file not in cache: #{path}|], pos, currentFile)
         inner <- nodeToExpr cache path cachedSnapshot.dsNode
-        pure (CEFileBarrier pos path inner)
-  Scalar pos (SUnknown tag text)
-    | tagToText tag == Just "!load_str" -> do
-        let baseDir = takeDirectory currentFile
-            path = resolvePath baseDir (T.unpack text)
-        contents <-
-          note
-            ([i|!load_str file not in cache: #{path}|], pos, currentFile)
-            (Map.lookup path cache.rawTexts)
-        pure (CELoadStr pos path contents)
-  Scalar {} -> pure (CEScalar node)
+        return $ CEFileBarrier pos path inner
+    | Just name <- tagToText tag >>= T.stripPrefix "!var_" -> do
+        when (T.null name) $
+          Left ([i|!var_ with empty name|], pos, currentFile)
+        return $ CEVarRef name pos
+  Scalar {} -> return $ CEScalar node
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" -> do
-        merged <- resolveInherit cache currentFile pos mapping
-        pure merged
+        merged <- resolveInherit isDocumentRoot cache currentFile pos mapping
+        return merged
   Mapping _ _ mapping -> do
-    fields <- traverse (processMappingKey cache currentFile) (Map.toList mapping)
-    pure (CEObject (nodeAnn node) (Map.fromList fields))
+    when isDocumentRoot $
+      ensureDistinctDeclarations currentFile mapping
+    fields <- traverse (processMappingKey isDocumentRoot cache currentFile) (M.toList mapping)
+    return $ CEObject (nodeAnn node) (M.fromList fields)
   Sequence pos tag nodes
     | tagToText tag == Just "!prod" -> do
-        choices <- traverse (nodeToExpr cache currentFile) nodes
-        when (null choices) $
+        when (null nodes) $
           Left ([i|!prod with empty list|], pos, currentFile)
-        pure (CEProd pos choices)
+        let zipNode = Sequence pos (mkTag $ "!zip_" <> T.unpack (freshKey currentFile pos)) nodes
+        nodeToExprAtRoot isDocumentRoot cache currentFile zipNode
   Sequence pos tag nodes
     | Just zipName <- tagToText tag >>= T.stripPrefix "!zip_" -> do
         when (T.null zipName) $
           Left ([i|!zip_ with empty scope name|], pos, currentFile)
-        choices <- traverse (nodeToExpr cache currentFile) nodes
-        when (null choices) $
+        when (null nodes) $
           Left ([i|!zip_#{zipName} with empty list|], pos, currentFile)
-        pure (CEZip pos zipName choices)
+        traverse (nodeToExprAtRoot False cache currentFile) nodes
+          <&> CEZip pos zipName
   Sequence _ _ nodes ->
-    CEArray (nodeAnn node) <$> traverse (nodeToExpr cache currentFile) nodes
-  Anchor _ _ inner -> nodeToExpr cache currentFile inner
+    CEArray (nodeAnn node) <$> traverse (nodeToExprAtRoot False cache currentFile) nodes
+  Anchor _ _ inner -> nodeToExprAtRoot isDocumentRoot cache currentFile inner
 
-processMappingKey :: YamlCache -> FilePath -> (Node Pos, Node Pos) -> Either Err (Node (), (Pos, ConfigExpr))
-processMappingKey cache currentFile (kNode, vNode) =
+processMappingKey :: Bool -> YamlCache -> FilePath -> (Node Pos, Node Pos) -> Either Err (Node (), (Pos, ConfigExpr))
+processMappingKey isDocumentRoot cache currentFile (kNode, vNode) =
   case keyTag kNode of
-    Just name -> do
+    Just (KeyDeclaration name) -> do
       when (T.null name) $
         Left ([i|!key with empty name|], nodeAnn kNode, currentFile)
-      pure (plainKeyNode name, (nodeAnn kNode, CEKeyDecl name (nodeAnn kNode)))
+      return (plainKeyNode name, (nodeAnn kNode, CEKeyDecl name (nodeAnn kNode)))
+    Just (GlobalKeyDeclaration name)
+      | not isDocumentRoot -> Left ([i|!global_key declarations are only allowed at a document root|], nodeAnn kNode, currentFile)
+      | T.null name -> Left ([i|!global_key with empty name|], nodeAnn kNode, currentFile)
+      | otherwise -> return (plainKeyNode name, (nodeAnn kNode, CEGlobalKeyDecl name (nodeAnn kNode)))
+    Just (VariableDeclaration isGlobal name)
+      | not isDocumentRoot -> Left ([i|!#{variableDeclarationName isGlobal} declarations are only allowed at a document root|], nodeAnn kNode, currentFile)
+      | T.null name -> Left ([i|!#{variableDeclarationName isGlobal} with empty name|], nodeAnn kNode, currentFile)
+      | otherwise -> do
+          val <- nodeToExprAtRoot False cache currentFile vNode
+          return (void kNode, (nodeAnn kNode, CEVarDecl isGlobal name (nodeAnn kNode) val))
     Nothing -> do
-      val <- nodeToExpr cache currentFile vNode
-      pure (void kNode, (nodeAnn kNode, val))
+      val <- nodeToExprAtRoot False cache currentFile vNode
+      return (void kNode, (nodeAnn kNode, val))
   where
     plainKeyNode name = Scalar () (SStr name)
 
     keyTag (Scalar _ (SUnknown tag text))
-      | tagToText tag == Just "!key" = Just text
+      | tagToText tag == Just "!key" = Just (KeyDeclaration text)
+      | tagToText tag == Just "!global_key" = Just (GlobalKeyDeclaration text)
+      | tagToText tag == Just "!set" = Just (VariableDeclaration False text)
+      | tagToText tag == Just "!global_set" = Just (VariableDeclaration True text)
     keyTag _ = Nothing
 
-resolveInherit :: YamlCache -> FilePath -> Pos -> Mapping Pos -> Either Err ConfigExpr
-resolveInherit cache currentFile pos mapping = do
+data KeyDeclaration
+  = KeyDeclaration Text
+  | GlobalKeyDeclaration Text
+  | VariableDeclaration Bool Text
+
+ensureDistinctDeclarations :: FilePath -> Mapping Pos -> Either Err ()
+ensureDistinctDeclarations currentFile = void . foldM addDeclaration M.empty . M.toList
+  where
+    addDeclaration declarations (key, _) = case keyTag key of
+      Just (VariableDeclaration isGlobal name)
+        | Just previousPos <- declarations M.!? (isGlobal, name) ->
+            Left ([i|duplicate variable declaration: '#{name}'|], previousPos, currentFile)
+        | otherwise -> Right (M.insert (isGlobal, name) (nodeAnn key) declarations)
+      _ -> Right declarations
+
+    keyTag (Scalar _ (SUnknown tag text))
+      | tagToText tag == Just "!set" = Just (VariableDeclaration False text)
+      | tagToText tag == Just "!global_set" = Just (VariableDeclaration True text)
+    keyTag _ = Nothing
+
+variableDeclarationName :: Bool -> Text
+variableDeclarationName isGlobal = if isGlobal then "global_set" else "set"
+
+freshKey :: FilePath -> Pos -> Text
+freshKey file pos =
+  (file ++ show (posLine pos) ++ show (posColumn pos))
+    & foldl' (\acc c -> acc * 31 + fromEnum c) (0 :: Int)
+    & abs
+    & show
+    & T.pack
+    & ("__prod_" <>)
+
+resolveInherit :: Bool -> YamlCache -> FilePath -> Pos -> Mapping Pos -> Either Err ConfigExpr
+resolveInherit isDocumentRoot cache currentFile pos mapping = do
   baseText <-
     note
       ([i|!inherit requires a 'base' key|], pos, currentFile)
@@ -106,20 +147,23 @@ resolveInherit cache currentFile pos mapping = do
   baseSnapshot <-
     note
       ([i|!inherit base file not in cache: #{basePath}|], pos, currentFile)
-      (Map.lookup basePath cache.yamlDocuments)
+      (M.lookup basePath cache)
   baseExpr <- nodeToExpr cache basePath baseSnapshot.dsNode
-  let overrideMapping = Map.filterWithKey (\k _ -> scalarText k /= Just "base") mapping
-  overrideFields <- traverse (processMappingKey cache currentFile) (Map.toList overrideMapping)
-  pure (CEInherit pos basePath baseExpr (CEObject pos (Map.fromList overrideFields)))
+  let overrideMapping = M.filterWithKey (\k _ -> scalarText k /= Just "base") mapping
+  when isDocumentRoot $
+    ensureDistinctDeclarations currentFile overrideMapping
+  overrideFields <- traverse (processMappingKey isDocumentRoot cache currentFile) (M.toList overrideMapping)
+  return (CEInherit pos basePath baseExpr (CEObject pos (M.fromList overrideFields)))
 
 -- | Deep-merge two 'ConfigExpr' trees.  On mapping-key collision the
 -- position of the *second* (override) side wins, while the values are
 -- merged recursively.  Keys are positionless 'Node ()' so 'Map'
--- equality is purely structural.
+-- equality is returnly structural.
 deepMerge :: ConfigExpr -> ConfigExpr -> ConfigExpr
+deepMerge (CEOrigin _ inner) override = deepMerge inner override
 deepMerge (CEFileBarrier _ _ inner) override = deepMerge inner override
 deepMerge (CEInherit _ _ base inner) override = deepMerge (deepMerge base inner) override
 deepMerge (CEObject _ base) (CEObject overridePos override) = CEObject overridePos (mergeObj base override)
   where
-    mergeObj = Map.unionWith \(_, v1) (pos2, v2) -> (pos2, deepMerge v1 v2)
+    mergeObj = M.unionWith \(_, v1) (pos2, v2) -> (pos2, deepMerge v1 v2)
 deepMerge _ override = override

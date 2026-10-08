@@ -1,0 +1,2 @@
+!set item: !prod [one, two]
+value: !var_item

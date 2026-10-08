@@ -2,9 +2,9 @@
 module Yaml.Sweep.Loader
   ( DocSnapshot (..),
     collapseParentSegments,
-    YamlCache (..),
-    loadAndCache,
-    loadAndCacheSnapshots,
+    YamlCache,
+    loadReferencedYamlDocuments,
+    loadReferencedYamlDocumentsWith,
     findRefs,
     resolvePath,
     scalarText,
@@ -18,13 +18,14 @@ import Control.Monad.Except (throwError)
 import Data.ByteString.Lazy qualified as BL
 import Data.List (nubBy)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.String.Interpolate (i)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.YAML (Doc (..), Mapping, Node (..), Pos (..), Scalar (..), decodeNode)
 import Data.YAML.Event (tagToText)
-import System.Directory (doesFileExist)
 import System.FilePath (isAbsolute, joinPath, normalise, splitDirectories, takeDirectory, (</>))
+import Yaml.Sweep.Source (SourceReadError (..), SourceReader, readYamlFile)
 import Yaml.Sweep.Types (Err, noPos)
 
 ------------------------------------------------------------------------------
@@ -36,90 +37,65 @@ data DocSnapshot = DocSnapshot
     dsNode :: Node Pos
   }
 
-data YamlCache = YamlCache
-  { yamlDocuments :: Map FilePath DocSnapshot,
-    rawTexts :: Map FilePath Text
+type YamlCache = Map FilePath DocSnapshot
+
+data CacheState = CacheState
+  { csInProgress :: Set FilePath,
+    csDocuments :: YamlCache
   }
 
-instance Semigroup YamlCache where
-  left <> right =
-    YamlCache
-      { yamlDocuments = Map.union left.yamlDocuments right.yamlDocuments,
-        rawTexts = Map.union left.rawTexts right.rawTexts
-      }
-
-instance Monoid YamlCache where
-  mempty = YamlCache {yamlDocuments = Map.empty, rawTexts = Map.empty}
-
-data LoadStatus = InProgress | Done DocSnapshot
-
-type CacheState = Map.Map FilePath LoadStatus
-
-type FileReader = FilePath -> IO (Maybe Text)
-
-type LoadMonad = ReaderT FileReader (ExceptT Err (StateT CacheState IO))
+type LoadMonad = ReaderT SourceReader (ExceptT Err (StateT CacheState IO))
 
 ------------------------------------------------------------------------------
 -- File loading
 ------------------------------------------------------------------------------
 
-loadAndCache :: (FilePath -> IO (Maybe Text)) -> FilePath -> IO (Either Err YamlCache)
-loadAndCache fileReader rootPath =
-  evalStateT (runExceptT (runReaderT (processFile [] (collapseParentSegments rootPath)) fileReader)) Map.empty
+loadReferencedYamlDocuments :: FilePath -> IO (Either Err YamlCache)
+loadReferencedYamlDocuments = loadReferencedYamlDocumentsWith readYamlFile
 
-loadAndCacheSnapshots :: FilePath -> IO (Either Err YamlCache)
-loadAndCacheSnapshots = loadAndCache (const (pure Nothing))
+loadReferencedYamlDocumentsWith :: SourceReader -> FilePath -> IO (Either Err YamlCache)
+loadReferencedYamlDocumentsWith sourceReader rootPath =
+  evalStateT (runExceptT $ runReaderT loadCache sourceReader) CacheState {csInProgress = Set.empty, csDocuments = Map.empty}
+  where
+    loadCache = do
+      processFile [] rootPath
+      csDocuments <$> get
 
-processFile :: [StackFrame] -> FilePath -> LoadMonad YamlCache
-processFile stack path = do
-  cache <- get
-  case Map.lookup path cache of
-    Just InProgress -> do
+processFile :: [StackFrame] -> FilePath -> LoadMonad ()
+processFile stack rawPath = do
+  let path = collapseParentSegments rawPath
+  CacheState {..} <- get
+  when (path `Set.member` csInProgress) $
+    err path
+  unless (path `Map.member` csDocuments) $
+    loadNewFile stack path
+  where
+    err path =
       let (refPos, refFile) = case stack of
             (f : _) -> (sfPos f, sfFile f)
             [] -> (noPos, path)
           cycleStr = formatCycle stack path
-      throwError (cycleStr, refPos, refFile)
-    Just (Done _) -> pure mempty
-    Nothing -> loadNewFile stack path
+       in throwError (cycleStr, refPos, refFile)
 
-loadNewFile :: [StackFrame] -> FilePath -> LoadMonad YamlCache
+loadNewFile :: [StackFrame] -> FilePath -> LoadMonad ()
 loadNewFile stack path = do
-  modify' (Map.insert path InProgress)
-  source <- readSource stack path
+  modify' $ \cacheState@CacheState {..} -> cacheState {csInProgress = Set.insert path csInProgress}
+  sourceReader <- ask
+  source <- liftIO (sourceReader path) >>= either (throwError . formatSourceReadError stack path) pure
   let content = BL.fromStrict (TE.encodeUtf8 source)
   node <- case decodeNode content of
     Left (pos, err) -> throwError ([i|YAML parse error: #{err}|], pos, path)
     Right [] -> throwError ([i|empty YAML document|], noPos, path)
     Right (doc : _) -> pure (docRoot doc)
   let baseDir = takeDirectory path
-      refs = nubBy (\left right -> refPath left == refPath right && refKind left == refKind right) (findRefs baseDir node)
-  subCaches <- forM refs $ \ref -> do
+      refs = nubBy ((==) `on` refPath) (findRefs baseDir node)
+  forM_ refs $ \ref -> do
     let frame = StackFrame {sfFile = path, sfPos = refPos ref}
-    case refKind ref of
-      YamlRef -> processFile (frame : stack) (refPath ref)
-      RawRef -> do
-        raw <- readSource (frame : stack) (refPath ref)
-        pure mempty {rawTexts = Map.singleton (refPath ref) raw}
+    processFile (frame : stack) (refPath ref)
   let dsSource = source
       dsNode = node
       snapshot = DocSnapshot {..}
-  modify' (Map.insert path (Done snapshot))
-  pure $ mconcat (mempty {yamlDocuments = Map.singleton path snapshot} : subCaches)
-
-readSource :: [StackFrame] -> FilePath -> LoadMonad Text
-readSource stack path = do
-  fileReader <- ask
-  liftIO (fileReader path) >>= maybe (readDiskSource stack path) pure
-
-readDiskSource :: [StackFrame] -> FilePath -> LoadMonad Text
-readDiskSource stack path = do
-  exists <- liftIO $ doesFileExist path
-  unless exists $ throwError (formatFileNotFoundError stack path)
-  bytes <- liftIO $ readFileBS path
-  case TE.decodeUtf8' bytes of
-    Left err -> throwError ([i|UTF-8 decode error: #{displayException err}|], noPos, path)
-    Right source -> pure source
+  modify' $ \cacheState@CacheState {..} -> cacheState {csInProgress = Set.delete path csInProgress, csDocuments = Map.insert path snapshot csDocuments}
 
 ------------------------------------------------------------------------------
 -- Reference finding
@@ -128,14 +104,7 @@ readDiskSource stack path = do
 data StackFrame = StackFrame {sfFile :: FilePath, sfPos :: Pos}
   deriving (Show, Eq)
 
-data RefKind = YamlRef | RawRef
-  deriving (Show, Eq)
-
-data ConfigRef = ConfigRef
-  { refPath :: FilePath,
-    refPos :: Pos,
-    refKind :: RefKind
-  }
+data ConfigRef = ConfigRef {refPath :: FilePath, refPos :: Pos}
   deriving (Show, Eq)
 
 findRefs :: FilePath -> Node Pos -> [ConfigRef]
@@ -144,12 +113,6 @@ findRefs baseDir = \case
     | tagToText tag == Just "!include" ->
         let refPath = resolvePath baseDir (T.unpack text)
             refPos = pos
-            refKind = YamlRef
-         in [ConfigRef {..}]
-    | tagToText tag == Just "!load_str" ->
-        let refPath = resolvePath baseDir (T.unpack text)
-            refPos = pos
-            refKind = RawRef
          in [ConfigRef {..}]
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" ->
@@ -157,7 +120,6 @@ findRefs baseDir = \case
               t <- lookupScalar mapping "base"
               let refPath = resolvePath baseDir (T.unpack t)
                   refPos = pos
-                  refKind = YamlRef
               pure ConfigRef {..}
             childRefs = concatMap (\(k, v) -> findRefs baseDir k <> findRefs baseDir v) (Map.toList mapping)
          in basePaths <> childRefs
@@ -179,6 +141,10 @@ formatCycle stack path =
   let chain = reverse (path : map sfFile stack)
       chainStr = T.intercalate " -> " (map toText chain)
    in [i|Cycle detected: #{chainStr}|]
+
+formatSourceReadError :: [StackFrame] -> FilePath -> SourceReadError -> Err
+formatSourceReadError stack path SourceNotFound = formatFileNotFoundError stack path
+formatSourceReadError _ path (SourceUtf8Error message) = ([i|UTF-8 decode error: #{message}|], noPos, path)
 
 formatFileNotFoundError :: [StackFrame] -> FilePath -> Err
 formatFileNotFoundError [] path = ([i|file not found: #{path}|], noPos, path)

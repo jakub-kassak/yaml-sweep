@@ -1,0 +1,19 @@
+included:
+  value:
+    first: one
+    second: red
+---
+included:
+  value:
+    first: one
+    second: blue
+---
+included:
+  value:
+    first: two
+    second: red
+---
+included:
+  value:
+    first: two
+    second: blue

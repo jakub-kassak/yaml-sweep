@@ -1,0 +1,7 @@
+outside: left
+included:
+  inside: one
+---
+outside: right
+included:
+  inside: two

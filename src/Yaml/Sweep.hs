@@ -11,27 +11,22 @@
 --   * @!include@ and @!inherit@ both create file boundaries.
 module Yaml.Sweep
   ( ConfigLoadResult (..),
-    SourceSnapshot (..),
     loadConfigValue,
     loadConfigValueWithSnapshot,
   )
 where
 
-import Data.Map.Strict qualified as Map
+import Control.Monad.Trans.Except (except)
+import Data.Map.Strict qualified as M
 import Data.String.Interpolate (i)
 import Data.YAML (Node, Pos)
 import Yaml.Sweep.Expander (resolveAndExpand)
-import Yaml.Sweep.Loader (DocSnapshot (..), collapseParentSegments, loadAndCacheSnapshots, rawTexts, yamlDocuments)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, collapseParentSegments, loadReferencedYamlDocuments)
 import Yaml.Sweep.Parser (nodeToExpr)
 import Yaml.Sweep.Types (Err, noPos, note)
 
-data SourceSnapshot = SourceSnapshot
-  { ssDocuments :: Map FilePath DocSnapshot,
-    ssRawTexts :: Map FilePath Text
-  }
-
 data ConfigLoadResult = ConfigLoadResult
-  { clrSourceSnapshot :: SourceSnapshot,
+  { clrCache :: YamlCache,
     clrExpandedNodes :: [Node Pos]
   }
 
@@ -39,16 +34,13 @@ data ConfigLoadResult = ConfigLoadResult
 --   Returns one 'Node Pos' per resulting configuration variant.  Mapping
 --   keys keep their source positions; see README.md for details.
 loadConfigValue :: FilePath -> IO (Either Err [Node Pos])
-loadConfigValue yamlFile = fmap clrExpandedNodes <$> loadConfigValueWithSnapshot yamlFile
+loadConfigValue = loadConfigValueWithSnapshot >>> fmap (fmap clrExpandedNodes)
 
 loadConfigValueWithSnapshot :: FilePath -> IO (Either Err ConfigLoadResult)
 loadConfigValueWithSnapshot yamlFile = runExceptT do
   let canonicalPath = collapseParentSegments yamlFile
-  cache <- ExceptT $ loadAndCacheSnapshots canonicalPath
-  rootSnapshot <- ExceptT $ pure $ note ([i|Main file not in cache: #{canonicalPath}|], noPos, canonicalPath) (Map.lookup canonicalPath cache.yamlDocuments)
-  scoped <- ExceptT $ pure $ nodeToExpr cache canonicalPath rootSnapshot.dsNode
-  clrExpandedNodes <- ExceptT . pure $ resolveAndExpand scoped
-  let ssDocuments = cache.yamlDocuments
-      ssRawTexts = cache.rawTexts
-      clrSourceSnapshot = SourceSnapshot {..}
-  pure ConfigLoadResult {..}
+  clrCache <- loadReferencedYamlDocuments canonicalPath & ExceptT
+  rootSnapshot <- clrCache M.!? canonicalPath & note ([i|Main file not in cache: #{canonicalPath}|], noPos, canonicalPath) & except
+  scoped <- nodeToExpr clrCache canonicalPath rootSnapshot.dsNode & except
+  clrExpandedNodes <- resolveAndExpand scoped & except
+  return ConfigLoadResult {..}

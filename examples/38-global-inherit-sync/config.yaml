@@ -1,0 +1,4 @@
+!global_key pair:
+outer: !zip_pair [left, right]
+derived: !inherit
+  base: base.yaml

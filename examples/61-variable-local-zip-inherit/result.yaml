@@ -1,0 +1,9 @@
+value:
+  first: one
+  second: red
+child: value
+---
+value:
+  first: two
+  second: blue
+child: value

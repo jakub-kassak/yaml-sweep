@@ -1,0 +1,7 @@
+!key outer:
+!set shared: !zip_outer [one, two]
+!set independent: !prod [red, blue]
+items: !zip_outer
+  - first: !var_shared
+  - second: !var_shared
+tone: !var_independent

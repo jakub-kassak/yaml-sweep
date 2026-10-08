@@ -1,0 +1,2 @@
+!global_set same: root
+included: !include include.yaml

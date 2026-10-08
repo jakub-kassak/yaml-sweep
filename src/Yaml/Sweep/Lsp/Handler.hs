@@ -11,18 +11,17 @@ where
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as TE
 import Data.YAML (Pos (..))
 import Language.LSP.Protocol.Types (Diagnostic, Hover (..), Location)
 import Language.LSP.Protocol.Types qualified as LSP
-import System.Directory (doesFileExist)
 import System.FilePath (normalise)
 import Yaml.Sweep.Expander (resolveAndExpand)
-import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, loadAndCache, yamlDocuments)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, loadReferencedYamlDocumentsWith)
 import Yaml.Sweep.Lsp.Definition
 import Yaml.Sweep.Lsp.Inherit (findInheritHoverAt)
 import Yaml.Sweep.Lsp.Types
 import Yaml.Sweep.Parser (nodeToExpr)
+import Yaml.Sweep.Source (SourceReader)
 import Yaml.Sweep.Types (Err, noPos, note)
 
 handleDefinition :: YamlCache -> FilePath -> Pos -> Maybe Location
@@ -30,13 +29,13 @@ handleDefinition cache file pos =
   findDefinitionAt (buildJumpMap cache file) file pos >>= targetLocation
   where
     targetLocation JumpTarget {..} = do
+      DocSnapshot {..} <- lookupSnapshot cache jtTargetFile
       let locFile = jtTargetFile
           locSpan = jtTargetSpan
-          source = maybe "" (.dsSource) (lookupSnapshot cache jtTargetFile)
-      pure (locToLspLocation source SrcLoc {..})
+      pure (locToLspLocation dsSource SrcLoc {..})
 
 lookupSnapshot :: YamlCache -> FilePath -> Maybe DocSnapshot
-lookupSnapshot cache file = Map.foldrWithKey match Nothing cache.yamlDocuments
+lookupSnapshot cache file = Map.foldrWithKey match Nothing cache
   where
     canonicalFile = normalise file
     match cachedFile snapshot found
@@ -51,10 +50,10 @@ handleHover cache file pos = findInheritHoverAt cache file pos <&> toHover
         _contents = LSP.InL (LSP.mkMarkdown text)
         _range = Nothing
 
-validateDocument :: (FilePath -> IO (Maybe Text)) -> FilePath -> IO (Map FilePath [Diagnostic])
-validateDocument fileReader file =
-  loadAndCache fileReader file
-    >>= either (diagnosticsForError fileReader file) (validateCache fileReader file)
+validateDocument :: SourceReader -> FilePath -> IO (Map FilePath [Diagnostic])
+validateDocument sourceReader file =
+  loadReferencedYamlDocumentsWith sourceReader file
+    >>= either (diagnosticsForError sourceReader file) (validateCache sourceReader file)
 
 updateDiagnosticRoot ::
   LSP.NormalizedUri ->
@@ -88,33 +87,27 @@ aggregateDiagnostics targets diagnosticState =
   | target <- targets
   ]
 
-validateCache :: (FilePath -> IO (Maybe Text)) -> FilePath -> YamlCache -> IO (Map FilePath [Diagnostic])
-validateCache fileReader file cache =
+validateCache :: SourceReader -> FilePath -> YamlCache -> IO (Map FilePath [Diagnostic])
+validateCache sourceReader file cache =
   case validationResult of
-    Left err -> diagnosticsForError fileReader file err
+    Left err -> diagnosticsForError sourceReader file err
     Right _ -> pure Map.empty
   where
     validationResult = do
       DocSnapshot {..} <- note ("Main file not in cache", noPos, file) (lookupSnapshot cache file)
       nodeToExpr cache file dsNode >>= resolveAndExpand
 
-diagnosticsForError :: (FilePath -> IO (Maybe Text)) -> FilePath -> Err -> IO (Map FilePath [Diagnostic])
-diagnosticsForError fileReader rootFile (message, pos, errFile) = do
-  source <- readSource fileReader diagnosticFile
+diagnosticsForError :: SourceReader -> FilePath -> Err -> IO (Map FilePath [Diagnostic])
+diagnosticsForError sourceReader rootFile (message, pos, errFile) = do
+  source <- readSource sourceReader diagnosticFile
   pure (Map.singleton diagnosticFile [makeDiagnostic source pos message])
   where
     diagnosticFile
       | null errFile = rootFile
       | otherwise = errFile
 
-readSource :: (FilePath -> IO (Maybe Text)) -> FilePath -> IO Text
-readSource fileReader file = fileReader file >>= maybe readDisk pure
-  where
-    readDisk = do
-      exists <- doesFileExist file
-      if exists
-        then readFileBS file <&> fromRight "" . TE.decodeUtf8'
-        else pure ""
+readSource :: SourceReader -> FilePath -> IO Text
+readSource sourceReader file = either (const "") id <$> sourceReader file
 
 makeDiagnostic :: Text -> Pos -> Text -> Diagnostic
 makeDiagnostic source pos message = LSP.Diagnostic {..}

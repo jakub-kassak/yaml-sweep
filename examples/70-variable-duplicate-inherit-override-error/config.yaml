@@ -1,0 +1,5 @@
+!inherit
+base: base.yaml
+!set duplicate: first
+!set duplicate: second
+value: !var_duplicate

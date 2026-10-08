@@ -1,0 +1,5 @@
+!key pair:
+!set first: !zip_pair [one, two]
+!set second: !zip_pair [red, blue]
+firstValue: !var_first
+secondValue: !var_second

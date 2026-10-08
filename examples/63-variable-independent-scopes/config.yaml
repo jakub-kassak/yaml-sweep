@@ -1,0 +1,6 @@
+!set coordinates:
+  first: !prod [one, two]
+  second: !prod [red, blue]
+!set selected:
+  nested: !var_coordinates
+value: !var_selected

@@ -1,0 +1,3 @@
+!set selected: !zip_pair [one, two]
+outer: !zip_pair [left, middle, right]
+selected: !var_selected

@@ -1,0 +1,7 @@
+included:
+  outer: left
+  value: one
+---
+included:
+  outer: right
+  value: two
