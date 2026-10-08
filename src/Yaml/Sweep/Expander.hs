@@ -10,7 +10,7 @@ import Data.List (foldl1')
 import Data.Map.Strict qualified as M
 import Data.String.Interpolate qualified as I
 import Data.Text qualified as T
-import Data.YAML (Node (..), Pos (..), Scalar (..))
+import Data.YAML (Node (..), Pos (..))
 import Data.YAML.Event (Tag, mkTag)
 import Yaml.Sweep.Types
   ( ConfigExpr (..),
@@ -82,7 +82,6 @@ mergeDeep _ v2 = v2
 preScan :: ScopeEnv -> ConfigExpr -> Either Err ScopeEnv
 preScan env = \case
   CEScalar _ -> Right env
-  CELoadStr {} -> Right env
   CEFileBarrier _ _ _ -> Right env
   CEInherit _ _ _ override -> preScan env override
   CEArray _ _ -> Right env
@@ -95,11 +94,11 @@ preScan env = \case
             Left ([I.i|double definition: '#{name}' was already declared at the same scope|], sePos entry, seFile entry)
       _ -> Right (scopeInsert name (newScopeEntry True pos env) env)
   CEObject _ fields -> foldlM preScan env (snd <$> M.elems fields)
-  CEZip pos name exprs -> do
-    traverse_ (preScan (emptyScopeEnv (path env))) exprs
-    pure (scopeInsertIfMissing name (newScopeEntry False pos env) env)
-  CEProd pos exprs ->
-    preScan env (CEZip pos (freshKey (path env) pos) exprs)
+  CEZip pos name exprs ->
+    scopeInsertIfMissing name (newScopeEntry False pos env) env
+      & flip (foldlM preScan) exprs
+  CEProd _ exprs ->
+    foldlM preScan env exprs
   where
     scopeInsertIfMissing name entry e =
       maybe (scopeInsert name entry e) (const e) (scopeLookup name e)
@@ -117,7 +116,6 @@ newScopeEntry seIsExplicit sePos ScopeEnv {..} = ScopeEntry {..}
 expand :: ScopeEnv -> ConfigExpr -> Either Err (Maybe (SweepVariant SweepValue))
 expand env = \case
   CEScalar node -> node & SVScalar & Single & Just & Right
-  CELoadStr pos _ contents -> Scalar pos (SStr contents) & SVScalar & Single & Just & Right
   CEKeyDecl {} -> Right Nothing
   CEObject pos keyedFields ->
     traverse (traverse (expand env)) keyedFields
@@ -134,17 +132,14 @@ expand env = \case
       >>= foldM (merge pos) (Single (SVArray pos IM.empty))
         <&> Just
   CEZip pos key items ->
-    traverse (expandZipAlternative env pos) items
-      <&> concat
-      <&> M.singleton key
-      <&> Expand
-      <&> Just
+    mapM (expand env) items
+      <&> catMaybes
+      >>= traverse (mergeSingle (zipErrMsg, pos, path env))
+        <&> (Just . Expand . M.singleton key)
   CEProd pos items ->
     expand env (CEZip pos (freshKey (path env) pos) items)
-  CEFileBarrier _ fp inner -> do
-    includedEnv <- preScan (emptyScopeEnv fp) inner
-    includedValue <- expand includedEnv inner
-    pure (namespaceScopes "__include_" fp <$> includedValue)
+  CEFileBarrier pos fp inner ->
+    expand (emptyScopeEnv fp) inner >>= traverse (fmap Single . mergeSingle (fbErrMsg, pos, fp))
   CEInherit pos baseFile base override -> do
     -- The inherited base owns its scopes.  Namespace them before merging so
     -- an equally named child scope is independent rather than accidentally
@@ -161,22 +156,17 @@ expand env = \case
     env' = incScopeDepth env
     expandElem e = preScan env' e >>= flip expand e
 
+    mergeSingle _ (Single v) = Right v
+    mergeSingle err (Expand _) = Left err
+    fbErrMsg = "Top level keys in included file is not allowed"
+    zipErrMsg = "Zip over zip boundary is not supported"
+
     singletonObj pos k p v = SVObject pos (M.singleton k (p, v))
 
-expandZipAlternative :: ScopeEnv -> Pos -> ConfigExpr -> Either Err [SweepValue]
-expandZipAlternative env pos item = do
-  expanded <- expand (emptyScopeEnv (path env)) (CEArray pos [item])
-  case expanded of
-    Just (Single (SVArray _ values)) -> pure (IM.elems values)
-    _ -> Left ("zip alternative did not expand to an array", pos, path env)
-
 namespaceInheritedScopes :: FilePath -> SweepVariant a -> SweepVariant a
-namespaceInheritedScopes = namespaceScopes "__inherit_"
-
-namespaceScopes :: Text -> FilePath -> SweepVariant a -> SweepVariant a
-namespaceScopes _ _ single@(Single _) = single
-namespaceScopes prefix file (Expand scopes) =
-  Expand (M.mapKeys (\scope -> prefix <> T.pack file <> "::" <> scope) scopes)
+namespaceInheritedScopes _ single@(Single _) = single
+namespaceInheritedScopes baseFile (Expand scopes) =
+  Expand (M.mapKeys (\scope -> "__inherit_" <> T.pack baseFile <> "::" <> scope) scopes)
 
 merge :: Pos -> SweepVariant SweepValue -> SweepVariant SweepValue -> Either Err (SweepVariant SweepValue)
 merge _ (Single a1) (Single a2) = a1 `mergeDeep` a2 & Single & Right
@@ -196,7 +186,7 @@ expandLocalScopes _ s@(Single _) = [s]
 expandLocalScopes env (Expand m)
   | M.null notInEnv = [Expand m]
   | M.null inEnv = mergedLocals & map Single
-  | otherwise = mergedLocals & map (\sv -> fmap (sv `mergeDeep`) (Expand inEnv))
+  | otherwise = mergedLocals & map (\sv -> fmap (`mergeDeep` sv) (Expand inEnv))
   where
     (inEnv, notInEnv) = M.partitionWithKey (\k _ -> scopeMember k env) m
     mergedLocals = M.elems notInEnv & sequence & map (foldl1' mergeDeep)

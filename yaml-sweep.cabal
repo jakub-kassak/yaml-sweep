@@ -69,8 +69,8 @@ extra-doc-files:
     examples/18-include-file-barrier/inner.yaml
     examples/18-include-file-barrier/result.yaml
     examples/19-include-with-top-level-key/config.yaml
+    examples/19-include-with-top-level-key/error.txt
     examples/19-include-with-top-level-key/inner.yaml
-    examples/19-include-with-top-level-key/result.yaml
     examples/20-include-local-in-array/config.yaml
     examples/20-include-local-in-array/inner.yaml
     examples/20-include-local-in-array/result.yaml
@@ -96,22 +96,11 @@ extra-doc-files:
     examples/30-include-cycle-error/config.yaml
     examples/30-include-cycle-error/error.txt
     examples/30-include-cycle-error/inner.yaml
-    examples/31-nested-prod-in-prod/config.yaml
-    examples/31-nested-prod-in-prod/result.yaml
+    examples/31-zip-over-zip-boundary-error/config.yaml
+    examples/31-zip-over-zip-boundary-error/error.txt
     examples/32-inherit-sweep-boundary/base.yaml
     examples/32-inherit-sweep-boundary/config.yaml
     examples/32-inherit-sweep-boundary/result.yaml
-    examples/33-nested-explicit-zip-in-prod/config.yaml
-    examples/33-nested-explicit-zip-in-prod/result.yaml
-    examples/34-nested-zip-flattened-pairing/config.yaml
-    examples/34-nested-zip-flattened-pairing/result.yaml
-    examples/35-include-namespaced-scopes/config.yaml
-    examples/35-include-namespaced-scopes/left.yaml
-    examples/35-include-namespaced-scopes/result.yaml
-    examples/35-include-namespaced-scopes/right.yaml
-    examples/36-inherit-with-outer-key-override/base.yaml
-    examples/36-inherit-with-outer-key-override/config.yaml
-    examples/36-inherit-with-outer-key-override/result.yaml
 
 source-repository head
   type: git
@@ -309,7 +298,6 @@ test-suite yaml-sweep-test
   main-is: Spec.hs
   other-modules:
       LspSpec
-      LoaderSpec
       Runner
   hs-source-dirs:
       test

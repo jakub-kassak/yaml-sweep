@@ -91,7 +91,6 @@ tests:
       - test
     other-modules:
       - LspSpec
-      - LoaderSpec
       - Runner
     dependencies:
       - yaml-sweep

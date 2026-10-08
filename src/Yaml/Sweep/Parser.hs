@@ -17,9 +17,7 @@ import Yaml.Sweep.Loader
     lookupScalar,
     nodeAnn,
     resolvePath,
-    rawTexts,
     scalarText,
-    yamlDocuments,
   )
 import Yaml.Sweep.Types
   ( ConfigExpr (..),
@@ -40,18 +38,9 @@ nodeToExpr cache currentFile node = case node of
         cachedSnapshot <-
           note
             ([i|!include file not in cache: #{path}|], pos, currentFile)
-            (Map.lookup path cache.yamlDocuments)
+            (Map.lookup path cache)
         inner <- nodeToExpr cache path cachedSnapshot.dsNode
-        pure (CEFileBarrier pos path inner)
-  Scalar pos (SUnknown tag text)
-    | tagToText tag == Just "!load_str" -> do
-        let baseDir = takeDirectory currentFile
-            path = resolvePath baseDir (T.unpack text)
-        contents <-
-          note
-            ([i|!load_str file not in cache: #{path}|], pos, currentFile)
-            (Map.lookup path cache.rawTexts)
-        pure (CELoadStr pos path contents)
+        pure (CEFileBarrier pos currentFile inner)
   Scalar {} -> pure (CEScalar node)
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" -> do
@@ -106,7 +95,7 @@ resolveInherit cache currentFile pos mapping = do
   baseSnapshot <-
     note
       ([i|!inherit base file not in cache: #{basePath}|], pos, currentFile)
-      (Map.lookup basePath cache.yamlDocuments)
+      (Map.lookup basePath cache)
   baseExpr <- nodeToExpr cache basePath baseSnapshot.dsNode
   let overrideMapping = Map.filterWithKey (\k _ -> scalarText k /= Just "base") mapping
   overrideFields <- traverse (processMappingKey cache currentFile) (Map.toList overrideMapping)

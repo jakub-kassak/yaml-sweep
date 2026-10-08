@@ -1,8 +1,7 @@
 -- | Pass 1: IO & caching — load all YAML files recursively.
 module Yaml.Sweep.Loader
   ( DocSnapshot (..),
-    collapseParentSegments,
-    YamlCache (..),
+    YamlCache,
     loadAndCache,
     loadAndCacheSnapshots,
     findRefs,
@@ -24,7 +23,7 @@ import Data.Text.Encoding qualified as TE
 import Data.YAML (Doc (..), Mapping, Node (..), Pos (..), Scalar (..), decodeNode)
 import Data.YAML.Event (tagToText)
 import System.Directory (doesFileExist)
-import System.FilePath (isAbsolute, joinPath, normalise, splitDirectories, takeDirectory, (</>))
+import System.FilePath (isAbsolute, takeDirectory, (</>))
 import Yaml.Sweep.Types (Err, noPos)
 
 ------------------------------------------------------------------------------
@@ -36,20 +35,7 @@ data DocSnapshot = DocSnapshot
     dsNode :: Node Pos
   }
 
-data YamlCache = YamlCache
-  { yamlDocuments :: Map FilePath DocSnapshot,
-    rawTexts :: Map FilePath Text
-  }
-
-instance Semigroup YamlCache where
-  left <> right =
-    YamlCache
-      { yamlDocuments = Map.union left.yamlDocuments right.yamlDocuments,
-        rawTexts = Map.union left.rawTexts right.rawTexts
-      }
-
-instance Monoid YamlCache where
-  mempty = YamlCache {yamlDocuments = Map.empty, rawTexts = Map.empty}
+type YamlCache = Map FilePath DocSnapshot
 
 data LoadStatus = InProgress | Done DocSnapshot
 
@@ -65,7 +51,7 @@ type LoadMonad = ReaderT FileReader (ExceptT Err (StateT CacheState IO))
 
 loadAndCache :: (FilePath -> IO (Maybe Text)) -> FilePath -> IO (Either Err YamlCache)
 loadAndCache fileReader rootPath =
-  evalStateT (runExceptT (runReaderT (processFile [] (collapseParentSegments rootPath)) fileReader)) Map.empty
+  evalStateT (runExceptT (runReaderT (processFile [] rootPath) fileReader)) Map.empty
 
 loadAndCacheSnapshots :: FilePath -> IO (Either Err YamlCache)
 loadAndCacheSnapshots = loadAndCache (const (pure Nothing))
@@ -80,37 +66,29 @@ processFile stack path = do
             [] -> (noPos, path)
           cycleStr = formatCycle stack path
       throwError (cycleStr, refPos, refFile)
-    Just (Done _) -> pure mempty
+    Just (Done _) -> pure Map.empty
     Nothing -> loadNewFile stack path
 
 loadNewFile :: [StackFrame] -> FilePath -> LoadMonad YamlCache
 loadNewFile stack path = do
   modify' (Map.insert path InProgress)
-  source <- readSource stack path
+  fileReader <- ask
+  source <- liftIO (fileReader path) >>= maybe (readDiskSource stack path) pure
   let content = BL.fromStrict (TE.encodeUtf8 source)
   node <- case decodeNode content of
     Left (pos, err) -> throwError ([i|YAML parse error: #{err}|], pos, path)
     Right [] -> throwError ([i|empty YAML document|], noPos, path)
     Right (doc : _) -> pure (docRoot doc)
   let baseDir = takeDirectory path
-      refs = nubBy (\left right -> refPath left == refPath right && refKind left == refKind right) (findRefs baseDir node)
+      refs = nubBy ((==) `on` refPath) (findRefs baseDir node)
   subCaches <- forM refs $ \ref -> do
     let frame = StackFrame {sfFile = path, sfPos = refPos ref}
-    case refKind ref of
-      YamlRef -> processFile (frame : stack) (refPath ref)
-      RawRef -> do
-        raw <- readSource (frame : stack) (refPath ref)
-        pure mempty {rawTexts = Map.singleton (refPath ref) raw}
+    processFile (frame : stack) (refPath ref)
   let dsSource = source
       dsNode = node
       snapshot = DocSnapshot {..}
   modify' (Map.insert path (Done snapshot))
-  pure $ mconcat (mempty {yamlDocuments = Map.singleton path snapshot} : subCaches)
-
-readSource :: [StackFrame] -> FilePath -> LoadMonad Text
-readSource stack path = do
-  fileReader <- ask
-  liftIO (fileReader path) >>= maybe (readDiskSource stack path) pure
+  pure $ Map.unions (Map.singleton path snapshot : subCaches)
 
 readDiskSource :: [StackFrame] -> FilePath -> LoadMonad Text
 readDiskSource stack path = do
@@ -128,14 +106,7 @@ readDiskSource stack path = do
 data StackFrame = StackFrame {sfFile :: FilePath, sfPos :: Pos}
   deriving (Show, Eq)
 
-data RefKind = YamlRef | RawRef
-  deriving (Show, Eq)
-
-data ConfigRef = ConfigRef
-  { refPath :: FilePath,
-    refPos :: Pos,
-    refKind :: RefKind
-  }
+data ConfigRef = ConfigRef {refPath :: FilePath, refPos :: Pos}
   deriving (Show, Eq)
 
 findRefs :: FilePath -> Node Pos -> [ConfigRef]
@@ -144,12 +115,6 @@ findRefs baseDir = \case
     | tagToText tag == Just "!include" ->
         let refPath = resolvePath baseDir (T.unpack text)
             refPos = pos
-            refKind = YamlRef
-         in [ConfigRef {..}]
-    | tagToText tag == Just "!load_str" ->
-        let refPath = resolvePath baseDir (T.unpack text)
-            refPos = pos
-            refKind = RawRef
          in [ConfigRef {..}]
   Mapping pos tag mapping
     | tagToText tag == Just "!inherit" ->
@@ -157,7 +122,6 @@ findRefs baseDir = \case
               t <- lookupScalar mapping "base"
               let refPath = resolvePath baseDir (T.unpack t)
                   refPos = pos
-                  refKind = YamlRef
               pure ConfigRef {..}
             childRefs = concatMap (\(k, v) -> findRefs baseDir k <> findRefs baseDir v) (Map.toList mapping)
          in basePaths <> childRefs
@@ -218,17 +182,5 @@ lookupScalar m key = join (listToMaybe [scalarText v | (k, v) <- Map.toList m, s
 
 resolvePath :: FilePath -> FilePath -> FilePath
 resolvePath baseDir p
-  | isAbsolute p = collapseParentSegments p
-  | otherwise = collapseParentSegments (baseDir </> p)
-
-collapseParentSegments :: FilePath -> FilePath
-collapseParentSegments path =
-  joinPath $ reverse $ foldl' collapse [] (splitDirectories (normalise path))
-  where
-    collapse parts ".." = case parts of
-      part : rest
-        | part /= ".." && not (isAbsolute path && null rest) -> rest
-      _
-        | isAbsolute path -> parts
-        | otherwise -> ".." : parts
-    collapse parts part = part : parts
+  | isAbsolute p = p
+  | otherwise = baseDir </> p
