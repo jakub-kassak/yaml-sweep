@@ -21,13 +21,12 @@ import Data.Map.Strict qualified as Map
 import Data.String.Interpolate (i)
 import Data.YAML (Node, Pos)
 import Yaml.Sweep.Expander (resolveAndExpand)
-import Yaml.Sweep.Loader (DocSnapshot (..), collapseParentSegments, loadAndCacheSnapshots, rawTexts, yamlDocuments)
+import Yaml.Sweep.Loader (DocSnapshot (..), YamlCache, collapseParentSegments, loadAndCacheSnapshots)
 import Yaml.Sweep.Parser (nodeToExpr)
 import Yaml.Sweep.Types (Err, noPos, note)
 
 data SourceSnapshot = SourceSnapshot
-  { ssDocuments :: Map FilePath DocSnapshot,
-    ssRawTexts :: Map FilePath Text
+  { ssDocuments :: YamlCache
   }
 
 data ConfigLoadResult = ConfigLoadResult
@@ -45,10 +44,9 @@ loadConfigValueWithSnapshot :: FilePath -> IO (Either Err ConfigLoadResult)
 loadConfigValueWithSnapshot yamlFile = runExceptT do
   let canonicalPath = collapseParentSegments yamlFile
   cache <- ExceptT $ loadAndCacheSnapshots canonicalPath
-  rootSnapshot <- ExceptT $ pure $ note ([i|Main file not in cache: #{canonicalPath}|], noPos, canonicalPath) (Map.lookup canonicalPath cache.yamlDocuments)
+  rootSnapshot <- ExceptT $ pure $ note ([i|Main file not in cache: #{canonicalPath}|], noPos, canonicalPath) (Map.lookup canonicalPath cache)
   scoped <- ExceptT $ pure $ nodeToExpr cache canonicalPath rootSnapshot.dsNode
   clrExpandedNodes <- ExceptT . pure $ resolveAndExpand scoped
-  let ssDocuments = cache.yamlDocuments
-      ssRawTexts = cache.rawTexts
+  let ssDocuments = cache
       clrSourceSnapshot = SourceSnapshot {..}
   pure ConfigLoadResult {..}
